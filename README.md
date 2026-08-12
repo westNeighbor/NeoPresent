@@ -58,7 +58,7 @@ pnpm setup:cli
 neopresent new my-talk
 neopresent serve presentations/my-talk/presentation.md
 ```
-Or if you are eager to check my example slides
+Or if you are eager to check my example slides, change the markdown to see live updates!
 ```sh
 neopresent serve examples/defense_slides/presentation.md
 ```
@@ -199,9 +199,9 @@ The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), 
 
 ## Future plans
 
-- Add more math plot types 
-- Support more disciplines other than physics/math
-- Add UI live editting
+- [ ] Add more math plot types 
+- [ ] Support more disciplines other than physics/math
+- [ ] Add UI live editting
 
 ## Supports
 

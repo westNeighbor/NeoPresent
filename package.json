@@ -1,0 +1,33 @@
+{
+  "name": "neopresent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Markdown-first presentation framework powered by Neo.mjs.",
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup:cli": "node ./scripts/build.mjs && node ./scripts/link-cli.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "eslint .",
+    "docs:generate": "node ./scripts/generate-plot-settings-reference.mjs && prettier --write docs/plot-settings-reference.md",
+    "docs:check": "node ./scripts/check-doc-settings.mjs && prettier --check README.md docs/*.md",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.1.10",
+    "webpack": "5.109.2",
+    "webpack-cli": "7.2.2",
+    "webpack-dev-server": "6.0.0"
+  }
+}

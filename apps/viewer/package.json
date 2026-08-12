@@ -1,0 +1,26 @@
+{
+  "name": "@neopresent/viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:core": "pnpm --filter @neopresent/core build",
+    "dev": "webpack serve -c ./node_modules/neo.mjs/buildScripts/webpack/webpack.server.config.mjs --port 8080",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@neopresent/core": "workspace:*",
+    "@neopresent/markdown": "workspace:*",
+    "@neopresent/plugin-api": "workspace:*",
+    "katex": "^0.16.22",
+    "mermaid": "^11.12.0",
+    "neo.mjs": "^13.1.0",
+    "pdfjs-dist": "^5.5.207"
+  },
+  "devDependencies": {
+    "webpack": "5.109.2",
+    "webpack-cli": "7.2.2",
+    "webpack-dev-server": "6.0.0"
+  }
+}

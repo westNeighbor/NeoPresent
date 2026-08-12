@@ -1,0 +1,25 @@
+{
+  "name": "@neopresent/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "neopresent": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "node ./dist/index.js check",
+    "export": "node ./dist/index.js export",
+    "new": "node ./dist/index.js new",
+    "outline": "node ./dist/index.js outline",
+    "serve": "node ./dist/index.js serve",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@neopresent/markdown": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2"
+  }
+}

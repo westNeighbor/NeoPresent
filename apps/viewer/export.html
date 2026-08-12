@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>NeoPresent PDF export</title>
+    <style>
+      @page {
+        size: 13.333333in 7.5in;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      .page {
+        break-after: page;
+        height: 7.5in;
+        overflow: hidden;
+        page-break-after: always;
+        width: 13.333333in;
+      }
+
+      .page:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+
+      iframe {
+        border: 0;
+        display: block;
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      const parameters = new URLSearchParams(location.search);
+      const slideCount = Math.max(1, Number(parameters.get('slides') || 1));
+      const aspect = String(parameters.get('aspect') || '16:9')
+        .split(':')
+        .map(Number);
+      const width = Number.isFinite(aspect[0]) && aspect[0] > 0 ? aspect[0] : 16;
+      const height = Number.isFinite(aspect[1]) && aspect[1] > 0 ? aspect[1] : 9;
+      const pageHeight = 7.5;
+      const pageWidth = pageHeight * (width / height);
+
+      document.querySelector('style').textContent += `
+        @page { size: ${pageWidth}in ${pageHeight}in; }
+        .page { width: ${pageWidth}in; height: ${pageHeight}in; }
+      `;
+
+      let loaded = 0;
+      for (let index = 1; index <= slideCount; index += 1) {
+        const page = document.createElement('section');
+        page.className = 'page';
+        const frame = document.createElement('iframe');
+        frame.src = `./?neopresent-export=1#slide=${index}&export=1`;
+        frame.addEventListener('load', () => {
+          loaded += 1;
+          if (loaded === slideCount) {
+            setTimeout(
+              () => document.documentElement.setAttribute('data-export-ready', 'true'),
+              2500
+            );
+          }
+        });
+        page.append(frame);
+        document.body.append(page);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+Feature , Cut value , DY eff. , QCD eff. , Punzi FOM 
+track1E          , $>$ 25.000 , 0.851 , 0.743 , 8.73$\times10^{-4}$ 
+track2E          , $>$ 20.000 , 0.769 , 0.508 , 9.45$\times10^{-4}$ 
+pairERatio       , $>$ 0.780  , 0.785 , 0.258 , NA 
+fpsL1Multi       , $\le$ 19.000 , 0.522 , 0.224 , NA 
+track1FpsL1E     , $<$ 2.800  , 0.652 , 0.423 , 9.07$\times10^{-4}$ 
+track2FpsL1E     , $<$ 2.900  , 0.651 , 0.465 , 8.66$\times10^{-4}$ 
+track1FpsL2E     , $<$ 2.700  , 0.601 , 0.365 , 9.04$\times10^{-4}$ 
+track2FpsL2E     , $<$ 2.900  , 0.610 , 0.405 , 8.73$\times10^{-4}$ 
+Combined         , -- , 4.2$\times10^{-2}$ , 6.3$\times10^{-4}$ , -- 
+

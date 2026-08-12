@@ -1,0 +1,4374 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./node_modules/katex/dist/katex.min.css" />
+    <script src="./src/neo/surfaceWheelGuard.js"></script>
+    <script src="./src/neo/surfaceInteraction.mjs" defer></script>
+    <script src="./src/neo/pdfRenderer.mjs" type="module"></script>
+    <title>NeoPresent Presenter</title>
+    <style>
+      :root {
+        --np-accent: #60a5fa;
+        --np-background: #101522;
+        --np-border: #34415e;
+        --np-code-string: #86efac;
+        --np-foreground: #f8fafc;
+        --np-muted: #d9e2f2;
+        --np-panel: #0b1020;
+        --np-surface: #182033;
+        color-scheme: dark;
+        font-family: Inter, system-ui, sans-serif;
+      }
+      body {
+        background: var(--np-background);
+        color: var(--np-foreground);
+        margin: 0;
+        min-height: 100vh;
+      }
+      @keyframes neopresent-chart-fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes neopresent-chart-rise {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes neopresent-chart-grow {
+        from {
+          opacity: 0;
+          transform: scale(0.88);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes neopresent-chart-draw {
+        from {
+          opacity: 0;
+          stroke-dashoffset: 1;
+        }
+        to {
+          opacity: 1;
+          stroke-dashoffset: 0;
+        }
+      }
+      @keyframes neopresent-chart-reveal-x {
+        from {
+          clip-path: inset(0 100% 0 0);
+        }
+        to {
+          clip-path: inset(0 0 0 0);
+        }
+      }
+      @keyframes neopresent-table-glow {
+        from {
+          filter: brightness(0.96) saturate(1);
+        }
+        to {
+          filter: brightness(1.38) saturate(1.35);
+        }
+      }
+      @keyframes neopresent-table-light-flow {
+        from {
+          background-position: 180% 0;
+        }
+        to {
+          background-position: -80% 0;
+        }
+      }
+      @keyframes neopresent-plot-glow {
+        from {
+          filter: drop-shadow(0 0 1px var(--neopresent-highlight-color)) brightness(0.98);
+        }
+        to {
+          filter: drop-shadow(0 0 9px var(--neopresent-highlight-color)) brightness(1.32)
+            saturate(1.25);
+        }
+      }
+      @keyframes neopresent-plot-flow {
+        0% {
+          filter: drop-shadow(-8px 0 1px transparent) brightness(0.98);
+        }
+        45% {
+          filter: drop-shadow(-2px 0 5px var(--neopresent-highlight-color)) brightness(1.25);
+        }
+        55% {
+          filter: drop-shadow(2px 0 8px var(--neopresent-highlight-color)) brightness(1.38);
+        }
+        100% {
+          filter: drop-shadow(8px 0 1px transparent) brightness(0.98);
+        }
+      }
+      @keyframes neopresent-text-typing {
+        from {
+          clip-path: inset(0 100% 0 0);
+        }
+        to {
+          clip-path: inset(0 0 0 0);
+        }
+      }
+      @keyframes neopresent-text-caret {
+        0%,
+        100% {
+          border-right-color: transparent;
+        }
+        50% {
+          border-right-color: var(--neopresent-typing-cursor-color, currentColor);
+        }
+      }
+      @keyframes neopresent-block-enter-fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes neopresent-block-enter-grow {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes neopresent-pdf-enter-grow {
+        from {
+          opacity: 0;
+          transform: scale(0.82);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes neopresent-block-enter-zoom {
+        from {
+          max-height: 0;
+          opacity: 0;
+          zoom: 35%;
+        }
+        to {
+          max-height: 100vh;
+          opacity: 1;
+          zoom: var(--neopresent-block-base-zoom, 100%);
+        }
+      }
+      @keyframes neopresent-block-enter-rise {
+        from {
+          opacity: 0;
+          transform: translateY(1.5rem);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes neopresent-block-shrink {
+        from {
+          opacity: 1;
+          zoom: var(--neopresent-block-base-zoom, 100%);
+        }
+        to {
+          opacity: 1;
+          zoom: var(--neopresent-block-target-zoom, 35%);
+        }
+      }
+      @keyframes neopresent-block-replace {
+        from {
+          opacity: 1;
+          transform: scale(1);
+        }
+        to {
+          opacity: 0;
+          transform: scale(0.98);
+        }
+      }
+      main {
+        box-sizing: border-box;
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1.2fr 1.8fr;
+        grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+        min-height: 100vh;
+        padding: 2rem;
+        position: relative;
+      }
+      .panel {
+        background: var(--np-panel);
+        border: 1px solid var(--np-border);
+        border-radius: 1rem;
+        padding: 1.5rem;
+      }
+      .notes {
+        grid-row: span 2;
+      }
+      .current-panel,
+      .adjacent-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .current-header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        margin-bottom: 1rem;
+      }
+      .current-title-row {
+        align-items: center;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+        min-width: 0;
+      }
+      .current-header h2 {
+        margin: 0;
+        white-space: nowrap;
+      }
+      .presentation-meta {
+        align-items: center;
+        display: flex;
+        flex: 0 1 auto;
+        gap: 0.65rem;
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .presentation-meta p {
+        margin: 0;
+      }
+      .presentation-meta [data-presenter-tip] {
+        cursor: help;
+        position: relative;
+      }
+      .presentation-meta [data-presenter-tip]::after {
+        background: var(--np-panel);
+        border: 1px solid var(--np-foreground);
+        border-radius: 0.4rem;
+        box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.32);
+        color: var(--np-foreground);
+        content: attr(data-presenter-tip);
+        font:
+          600 0.72rem/1.25 system-ui,
+          sans-serif;
+        left: 50%;
+        opacity: 0;
+        padding: 0.35rem 0.48rem;
+        pointer-events: none;
+        position: absolute;
+        top: calc(100% + 0.45rem);
+        transform: translate(-50%, -0.2rem);
+        transition:
+          opacity 120ms ease,
+          transform 120ms ease;
+        white-space: nowrap;
+        z-index: 100;
+      }
+      .presentation-meta [data-presenter-tip]:hover::after {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      .header-controls {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        justify-content: center;
+      }
+      .slide-preview {
+        background: var(--np-background);
+        border-radius: 0.65rem;
+        box-sizing: border-box;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0;
+        position: relative;
+      }
+      .preview-content {
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        height: 100%;
+        inset: 0;
+        overflow: visible;
+        padding: 8%;
+        position: absolute;
+        transform-origin: center center;
+        width: 100%;
+      }
+      .preview-stage {
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        height: 900px;
+        left: 50%;
+        overflow: visible;
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        transform-origin: center center;
+        width: 1600px;
+      }
+      .current-panel #current-preview {
+        aspect-ratio: 16 / 9;
+        align-self: center;
+        flex: 0 0 auto;
+        margin: auto 0;
+      }
+      #current-preview {
+        position: relative;
+      }
+      .presenter-animation-pause-tip {
+        align-items: center;
+        background: color-mix(in srgb, var(--np-panel) 92%, #f59e0b);
+        border: 1px solid color-mix(in srgb, var(--np-border) 55%, #fbbf24);
+        border-radius: 999px;
+        bottom: 1rem;
+        box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.35);
+        color: var(--np-foreground);
+        display: flex;
+        font:
+          700 0.82rem/1.2 system-ui,
+          sans-serif;
+        gap: 0.4rem;
+        left: 50%;
+        padding: 0.45rem 0.75rem;
+        pointer-events: none;
+        position: absolute;
+        transform: translateX(-50%);
+        z-index: 80;
+      }
+      .presenter-animation-pause-tip[hidden] {
+        display: none;
+      }
+      .presenter-slide-overlay {
+        background: color-mix(in srgb, var(--np-panel) 94%, transparent);
+        border: 1px solid var(--np-border);
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.42);
+        box-sizing: border-box;
+        display: none;
+        position: absolute;
+        z-index: 40;
+      }
+      .presenter-slide-overlay.is-open {
+        display: block;
+      }
+      .presenter-toc-overlay {
+        border-radius: 0 0.8rem 0.8rem 0;
+        bottom: 4%;
+        left: 0;
+        max-width: 420px;
+        overflow: auto;
+        padding: 0.8rem;
+        top: 4%;
+        width: 44%;
+      }
+      .presenter-toc-entry {
+        align-items: baseline;
+        appearance: none;
+        background: transparent;
+        border: 0;
+        color: var(--np-foreground);
+        display: grid;
+        font-size: 0.78rem;
+        gap: 0.45rem;
+        grid-template-columns: 1.7rem minmax(0, 1fr);
+        padding: 0.36rem 0.45rem;
+        text-align: left;
+        width: 100%;
+      }
+      .presenter-toc-entry:hover,
+      .presenter-toc-entry:focus-visible {
+        background: color-mix(in srgb, var(--np-accent) 18%, transparent);
+        color: var(--np-foreground);
+        outline: 2px solid var(--np-accent);
+        outline-offset: -2px;
+      }
+      .presenter-toc-entry.is-child {
+        padding-left: 1.25rem;
+      }
+      .presenter-toc-entry.is-section {
+        font-weight: 800;
+      }
+      .presenter-toc-entry.is-current {
+        background: color-mix(in srgb, var(--np-accent) 20%, transparent);
+        box-shadow: inset 3px 0 0 var(--np-accent);
+        color: var(--np-foreground);
+      }
+      .presenter-filmstrip-overlay {
+        border-bottom: 0;
+        border-radius: 0.8rem 0.8rem 0 0;
+        bottom: 0;
+        height: 46%;
+        left: 2%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior: contain;
+        padding: 0.7rem;
+        right: 2%;
+        scroll-behavior: auto;
+        touch-action: pan-x;
+        white-space: nowrap;
+      }
+      .presenter-filmstrip-card {
+        aspect-ratio: 16 / 9;
+        background: var(--np-background);
+        border: 1px solid var(--np-border);
+        border-radius: 0.45rem;
+        display: inline-block;
+        height: calc(100% - 0.2rem);
+        margin-right: 0.7rem;
+        overflow: hidden;
+        position: relative;
+        vertical-align: top;
+      }
+      .presenter-filmstrip-card .preview-stage {
+        pointer-events: none;
+      }
+      .presenter-filmstrip-page-number {
+        background: color-mix(in srgb, var(--np-surface) 72%, transparent);
+        backdrop-filter: blur(5px);
+        border: 1px solid
+          color-mix(in srgb, var(--np-border) 82%, var(--np-foreground));
+        border-radius: 999px;
+        bottom: 0.4rem;
+        box-shadow: 0 2px 7px color-mix(in srgb, var(--np-background) 34%, transparent);
+        color: var(--np-foreground);
+        display: block;
+        font: 750 0.68rem/1 system-ui, sans-serif;
+        padding: 0.18rem 0.34rem;
+        pointer-events: none;
+        position: absolute;
+        right: 0.4rem;
+        z-index: 4;
+      }
+      .slide-preview h1 {
+        font-size: 1.6rem;
+      }
+      .slide-preview h2 {
+        color: var(--np-foreground);
+        font-size: 1.25rem;
+        letter-spacing: normal;
+        margin: 0;
+        text-transform: none;
+      }
+      .slide-preview p {
+        color: var(--np-muted);
+        line-height: 1.45;
+      }
+      .slide-preview a {
+        color: var(--np-accent);
+        text-decoration: underline;
+      }
+      .slide-preview code {
+        background: var(--np-panel);
+        border-radius: 0.25rem;
+        color: var(--np-code-string);
+        padding: 0.08em 0.28em;
+      }
+      .slide-preview mark {
+        background: var(--np-accent);
+        border-radius: 0.18em;
+        color: var(--np-background);
+        padding: 0.06em 0.22em;
+      }
+      .slide-preview s {
+        color: var(--np-muted);
+        text-decoration-thickness: 0.12em;
+      }
+      .slide-preview sup {
+        color: var(--np-accent);
+        font-size: 0.7em;
+        font-weight: 700;
+        margin-left: 0.08em;
+      }
+      .slide-preview blockquote {
+        border-left: 3px solid #818cf8;
+        color: #e8eeff;
+        font-style: italic;
+        margin: 0;
+        max-width: 90%;
+        padding-left: 0.75rem;
+        text-align: left;
+        white-space: pre-wrap;
+      }
+      .slide-preview .quote-attribution {
+        color: var(--np-accent);
+        display: block;
+        font-size: 0.75rem;
+        font-style: normal;
+        margin-top: 0.4rem;
+      }
+      .slide-preview .callout {
+        background: var(--np-surface);
+        border: 1px solid var(--np-accent);
+        border-left: 4px solid var(--np-accent);
+        border-radius: 0.4rem;
+        box-sizing: border-box;
+        color: var(--np-foreground);
+        padding: 0.65rem 0.8rem;
+        text-align: inherit;
+        width: 100%;
+      }
+      .slide-preview .callout-label {
+        color: var(--np-accent);
+        display: block;
+        font-size: 0.78rem;
+        margin-bottom: 0.3rem;
+        text-transform: uppercase;
+      }
+      .slide-preview .callout-tip {
+        border-color: #34d399;
+      }
+      .slide-preview .callout-tip .callout-label {
+        color: #34d399;
+      }
+      .slide-preview .callout-warning {
+        border-color: #fbbf24;
+      }
+      .slide-preview .callout-warning .callout-label {
+        color: #fbbf24;
+      }
+      .slide-preview img {
+        max-height: 140px;
+        max-width: 100%;
+        object-fit: contain;
+      }
+      .slide-preview .image-preview {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        max-width: 100%;
+      }
+      .slide-preview .image-caption {
+        color: var(--np-muted);
+        display: block;
+        font-size: 0.72rem;
+      }
+      .slide-preview .section-preview {
+        border-top: 3px solid var(--np-accent);
+        box-sizing: border-box;
+        max-width: 90%;
+        padding-top: 0.7rem;
+        width: 100%;
+      }
+      .slide-preview .section-preview-label {
+        color: var(--np-accent);
+        display: block;
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        margin-bottom: 0.35rem;
+      }
+      .slide-preview .title-subtitle {
+        color: var(--np-muted);
+        font-size: 0.95rem;
+        line-height: 1.4;
+        max-width: 90%;
+      }
+      .slide-preview .title-author {
+        color: var(--np-accent);
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+      .slide-preview .references-preview {
+        border-top: 1px solid var(--np-border);
+        box-sizing: border-box;
+        color: var(--np-muted);
+        font-size: 0.68rem;
+        line-height: 1.4;
+        padding-top: 0.4rem;
+        text-align: left;
+        width: 100%;
+      }
+      .slide-preview .references-preview strong {
+        color: var(--np-accent);
+        display: block;
+        font-size: 0.62rem;
+        letter-spacing: 0.12em;
+        margin-bottom: 0.22rem;
+      }
+      .slide-preview .stat-preview {
+        background: var(--np-panel);
+        border: 2px solid var(--np-accent);
+        border-radius: 0.5rem;
+        box-sizing: border-box;
+        min-width: 120px;
+        padding: 0.6rem 0.85rem;
+        text-align: center;
+      }
+      .slide-preview .stat-value {
+        color: var(--np-accent);
+        font-size: 1.8rem;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .slide-preview .stat-label {
+        color: var(--np-muted);
+        font-size: 0.7rem;
+        margin-top: 0.3rem;
+      }
+      .slide-preview .slide-button {
+        background: var(--np-accent);
+        border-radius: 0.35rem;
+        color: var(--np-background);
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 0.4rem 0.6rem;
+        text-decoration: none;
+      }
+      .slide-preview .slide-divider {
+        border: 0;
+        border-top: 2px solid var(--np-accent);
+        margin: 0.2rem 0;
+        opacity: 0.72;
+        width: 70%;
+      }
+      .slide-preview pre {
+        background: #080d1d;
+        border-radius: 0.5rem;
+        box-sizing: border-box;
+        margin: 0;
+        max-height: 120px;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 0.75rem;
+        text-align: left;
+        white-space: pre-wrap;
+        width: 100%;
+      }
+      .slide-preview .code-preview {
+        align-items: stretch;
+        display: flex;
+        max-width: 100%;
+        width: 100%;
+      }
+      .slide-preview .code-line-numbers {
+        color: var(--np-muted);
+        margin: 0;
+        padding: 0.75rem 0 0.75rem 0.5rem;
+        text-align: right;
+        user-select: none;
+      }
+      .slide-preview .code-preview pre {
+        border-radius: 0 0.5rem 0.5rem 0;
+        flex: 1;
+        min-width: 0;
+      }
+      .slide-preview table {
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        max-width: 100%;
+      }
+      .slide-preview td,
+      .slide-preview th {
+        border: 1px solid #31416b;
+        padding: 0.35rem 0.5rem;
+      }
+      .slide-preview .columns {
+        display: flex;
+        gap: 1rem;
+        width: 100%;
+      }
+      .slide-preview .columns > div {
+        flex: 1;
+        min-width: 0;
+      }
+      .slide-preview .columns.grid {
+        display: grid;
+      }
+      .slide-preview .chart {
+        border: 1px solid #31416b;
+        border-radius: 0.5rem;
+        box-sizing: border-box;
+        color: #c5d1ef;
+        padding: 0.75rem;
+        width: 90%;
+      }
+      .slide-preview .chart-title {
+        font-size: 0.8rem;
+        margin-bottom: 0.45rem;
+      }
+      .slide-preview .chart svg {
+        display: block;
+        height: 115px;
+        width: 100%;
+      }
+      .slide-preview .feynman-preview {
+        max-height: 150px;
+        max-width: 100%;
+        overflow: hidden;
+        width: 100%;
+      }
+      .slide-preview .feynman-preview svg {
+        height: auto;
+        max-height: 150px;
+        max-width: 100%;
+        width: 100%;
+      }
+      .slide-preview .mermaid-preview {
+        align-items: center;
+        display: flex;
+        justify-content: center;
+        max-height: 150px;
+        max-width: 100%;
+        overflow: hidden;
+        width: 100%;
+      }
+      .slide-preview .mermaid-preview svg {
+        height: auto;
+        max-height: 150px;
+        max-width: 100%;
+        width: auto;
+      }
+      .slide-preview .math-preview {
+        color: var(--np-foreground);
+        font-size: 0.9rem;
+        max-width: 100%;
+        overflow-x: auto;
+        padding: 0.3rem;
+      }
+      .slide-preview .math-inline {
+        display: inline-block;
+        white-space: nowrap;
+      }
+      .slide-preview .embed-preview {
+        background: var(--np-panel);
+        border: 1px solid var(--np-border);
+        border-radius: 0.45rem;
+        color: var(--np-muted);
+        font-size: 0.75rem;
+        max-width: 90%;
+        padding: 0.75rem;
+      }
+      .slide-preview .embed-preview a {
+        color: var(--np-accent);
+      }
+      .slide-preview .poll-preview {
+        background: var(--np-panel);
+        border: 1px solid var(--np-border);
+        border-radius: 0.45rem;
+        box-sizing: border-box;
+        max-width: 90%;
+        padding: 0.65rem;
+        text-align: left;
+        width: 100%;
+      }
+      .slide-preview .poll-preview h3 {
+        font-size: 0.85rem;
+        margin: 0 0 0.45rem;
+      }
+      .slide-preview .poll-option {
+        display: flex;
+        font-size: 0.72rem;
+        justify-content: space-between;
+        margin: 0.3rem 0;
+      }
+      .slide-preview li {
+        animation: reveal-item 0.22s ease-out both;
+      }
+      @keyframes reveal-item {
+        from {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .controls {
+        display: flex;
+        gap: 0.4rem;
+        justify-content: center;
+        margin-top: 1rem;
+      }
+      .control-group {
+        align-items: center;
+        display: none;
+        gap: 0.4rem;
+      }
+      .control-group.is-visible {
+        display: flex;
+      }
+      button {
+        background: #151f3b;
+        border: 1px solid #31416b;
+        border-radius: 0.4rem;
+        color: #e8eeff;
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.78rem;
+        padding: 0.32rem 0.6rem;
+      }
+      button:hover {
+        background: #243052;
+      }
+      button.is-active {
+        background: #7f1d1d;
+        border-color: #ff6b63;
+      }
+      .pointer-symbol {
+        align-items: center;
+        color: #91a4cb;
+        display: flex;
+        font-size: 0.72rem;
+        gap: 0.3rem;
+      }
+      .pointer-symbol input,
+      .pointer-symbol select {
+        background: #080d1d;
+        border: 1px solid #31416b;
+        border-radius: 0.35rem;
+        color: #e8eeff;
+        font: inherit;
+        padding: 0.28rem;
+        text-align: center;
+      }
+      .pointer-symbol input {
+        width: 2.1rem;
+      }
+      .pointer-symbol select {
+        max-width: 5.2rem;
+      }
+      .pointer-symbol input[type='file'] {
+        font-size: 0.64rem;
+        max-width: 9.5rem;
+        text-align: left;
+        width: 9.5rem;
+      }
+      .jump-input {
+        background: #080d1d;
+        border: 1px solid #31416b;
+        border-radius: 0.35rem;
+        color: #e8eeff;
+        font: inherit;
+        padding: 0.28rem;
+        text-align: center;
+        width: 3.25rem;
+      }
+      .presenter-pointer {
+        align-items: center;
+        background: #ff3b30;
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        box-shadow: 0 0 8px 3px rgba(255, 59, 48, 0.72);
+        display: flex;
+        height: 14px;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        position: absolute;
+        transform: translate(-50%, -50%);
+        transition: none;
+        width: 14px;
+        z-index: 5;
+      }
+      .chart-tooltip {
+        background: rgba(2, 6, 23, 0.96);
+        border: 1px solid var(--np-accent);
+        border-radius: 0.4rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+        color: var(--np-foreground);
+        display: none;
+        font-size: 0.78rem;
+        line-height: 1.35;
+        max-width: min(340px, calc(100vw - 24px));
+        padding: 0.42rem 0.56rem;
+        pointer-events: none;
+        position: fixed;
+        white-space: normal;
+        z-index: 20;
+      }
+      .slide-preview [data-neopresent-tooltip] {
+        cursor: pointer;
+      }
+      .slide-preview [data-neopresent-tooltip-active='true'] {
+        filter: drop-shadow(0 0 7px #facc15);
+        opacity: 1 !important;
+        stroke: #facc15 !important;
+      }
+      .presenter-pointer.has-symbol {
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        color: #ff3b30;
+        font-size: 1.8rem;
+        font-variant-emoji: text;
+        height: auto;
+        text-shadow: 0 0 8px rgba(255, 59, 48, 0.72);
+        width: auto;
+      }
+      .annotation-layer {
+        height: 100%;
+        inset: 0;
+        pointer-events: none;
+        position: absolute;
+        width: 100%;
+        z-index: 4;
+      }
+      .annotation-color {
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        height: 1.5rem;
+        padding: 0;
+        width: 1.8rem;
+      }
+      .annotation-size {
+        accent-color: #ff3b30;
+        cursor: pointer;
+        width: 4.25rem;
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      h2 {
+        color: #a5b4fc;
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      #notes {
+        font-size: 1.35rem;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+      #timer {
+        color: #fbbf24;
+        font-size: 1.25rem;
+        font-weight: 700;
+      }
+      #slide-timer {
+        color: #ff5c5c;
+        font-size: 1.25rem;
+        font-weight: 700;
+      }
+      .muted {
+        color: #91a4cb;
+      }
+      .adjacent-previews {
+        align-items: center;
+        display: grid;
+        flex: 1;
+        gap: 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-height: 0;
+      }
+      .adjacent-slide {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+        height: 100%;
+        justify-content: center;
+        min-height: 0;
+        min-width: 0;
+      }
+      .adjacent-slide-label {
+        color: #a5b4fc;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin: 0;
+        text-align: center;
+        text-transform: uppercase;
+        width: 100%;
+      }
+      .adjacent-previews .slide-preview {
+        aspect-ratio: 16 / 9;
+        height: auto;
+        max-height: 100%;
+        padding: 0.9rem;
+        width: 100%;
+      }
+      .adjacent-previews .slide-preview:not(.is-unavailable) {
+        cursor: pointer;
+      }
+      .adjacent-previews .slide-preview.is-unavailable {
+        cursor: default;
+        opacity: 0.48;
+      }
+      .resize-handle {
+        background: transparent;
+        border: 0;
+        border-radius: 0.4rem;
+        position: absolute;
+        touch-action: none;
+        user-select: none;
+        z-index: 10;
+      }
+      .resize-handle::after {
+        background: #52658f;
+        border-radius: 999px;
+        content: '';
+        opacity: 0.45;
+        position: absolute;
+        transition:
+          background 0.15s,
+          opacity 0.15s;
+      }
+      .resize-handle:hover::after,
+      .resize-handle.is-resizing::after {
+        background: #a5b4fc;
+        opacity: 1;
+      }
+      .resize-handle.vertical {
+        cursor: col-resize;
+        width: 1rem;
+      }
+      .resize-handle.vertical::after {
+        bottom: 0.35rem;
+        left: 0.45rem;
+        top: 0.35rem;
+        width: 0.12rem;
+      }
+      .resize-handle.horizontal {
+        cursor: row-resize;
+        height: 1rem;
+      }
+      .resize-handle.horizontal::after {
+        height: 0.12rem;
+        left: 0.35rem;
+        right: 0.35rem;
+        top: 0.45rem;
+      }
+      .shortcut-dialog {
+        align-items: center;
+        background: rgba(0, 0, 0, 0.68);
+        display: none;
+        inset: 0;
+        justify-content: center;
+        padding: 1.5rem;
+        position: fixed;
+        z-index: 50;
+      }
+      .shortcut-dialog.is-open {
+        display: flex;
+      }
+      .shortcut-card {
+        background: #0c1328;
+        border: 1px solid #52658f;
+        border-radius: 0.85rem;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+        max-width: 440px;
+        padding: 1.5rem;
+        width: 100%;
+      }
+      .shortcut-grid {
+        display: grid;
+        gap: 0.65rem 1.2rem;
+        grid-template-columns: auto 1fr;
+        margin: 1rem 0;
+      }
+      #shortcut-dialog {
+        backdrop-filter: blur(5px) saturate(0.72);
+        background: rgba(0, 0, 0, 0.7);
+      }
+      #shortcut-dialog .shortcut-card {
+        backdrop-filter: blur(20px) saturate(1.16);
+        background: color-mix(in srgb, var(--np-panel) 88%, transparent);
+        border-color: var(--np-border);
+        box-shadow: 0 24px 80px
+          color-mix(in srgb, var(--np-background) 68%, transparent);
+        color: var(--np-foreground);
+      }
+      #shortcut-dialog .shortcut-card h2 {
+        color: var(--np-foreground);
+      }
+      #shortcut-dialog .shortcut-grid span {
+        color: var(--np-foreground);
+      }
+      #shortcut-dialog kbd {
+        background: color-mix(in srgb, var(--np-surface) 88%, transparent);
+        border-color: color-mix(in srgb, var(--np-accent) 48%, var(--np-border));
+        color: var(--np-foreground);
+      }
+      .slide-search-results {
+        display: grid;
+        gap: 0.4rem;
+        margin: 1rem 0;
+        max-height: 50vh;
+        overflow: auto;
+      }
+      .slide-search-result {
+        text-align: left;
+        width: 100%;
+      }
+      .bookmark-list {
+        display: grid;
+        gap: 0.4rem;
+        margin: 1rem 0;
+        max-height: 50vh;
+        overflow: auto;
+      }
+      .bookmark-item {
+        text-align: left;
+        width: 100%;
+      }
+      #slide-search-input {
+        box-sizing: border-box;
+        font-size: 1rem;
+        text-align: left;
+        width: 100%;
+      }
+      kbd {
+        background: #151f3b;
+        border: 1px solid #52658f;
+        border-radius: 0.3rem;
+        color: #e8eeff;
+        font: inherit;
+        padding: 0.12rem 0.38rem;
+        white-space: nowrap;
+      }
+      #pdf-remote {
+        align-items: center;
+        align-self: center;
+        backdrop-filter: blur(18px) saturate(1.25);
+        background: color-mix(in srgb, var(--np-panel) 88%, transparent);
+        border: 1px solid color-mix(in srgb, var(--np-accent) 42%, var(--np-border));
+        border-radius: 999px;
+        box-sizing: border-box;
+        box-shadow: 0 16px 40px rgb(0 0 0 / 0.34), inset 0 1px rgb(255 255 255 / 0.08);
+        display: flex;
+        flex: 0 0 auto;
+        gap: 0.3rem;
+        margin: auto auto 0.5rem;
+        overflow-x: auto;
+        padding: 0.42rem 0.55rem;
+        position: relative;
+        width: min(100%, 680px);
+        z-index: 80;
+      }
+      #pdf-remote[hidden] {
+        display: none;
+      }
+      #pdf-remote button {
+        align-items: center;
+        background: color-mix(in srgb, var(--np-surface) 55%, #050914);
+        border-color: rgb(255 255 255 / 0.24);
+        border-radius: 999px;
+        color: #f8fafc;
+        display: inline-flex;
+        font-size: 0.88rem;
+        font-weight: 750;
+        height: 2rem;
+        justify-content: center;
+        min-width: 2rem;
+        padding: 0 0.62rem;
+        text-shadow: 0 1px 2px rgb(0 0 0 / 0.75);
+      }
+      #pdf-remote button:hover,
+      #pdf-remote button:focus-visible {
+        background: color-mix(in srgb, var(--np-accent) 42%, #111827);
+        border-color: color-mix(in srgb, var(--np-accent) 75%, white);
+        color: #ffffff;
+      }
+      .pdf-remote-label {
+        color: var(--np-accent);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.09em;
+        padding: 0 0.45rem;
+        text-transform: uppercase;
+      }
+      .pdf-remote-divider {
+        background: var(--np-border);
+        height: 1.45rem;
+        margin: 0 0.15rem;
+        opacity: 0.8;
+        width: 1px;
+      }
+      #pdf-remote-status {
+        color: #f8fafc;
+        font-size: 0.78rem;
+        font-variant-numeric: tabular-nums;
+        min-width: 5.5rem;
+        padding: 0 0.3rem;
+        text-align: center;
+        text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
+      }
+      @media (max-width: 1300px) {
+        .pdf-remote-label {
+          display: none;
+        }
+        #pdf-remote button {
+          padding-inline: 0.5rem;
+        }
+        #pdf-remote-status {
+          min-width: 4.8rem;
+        }
+      }
+      .current-panel:has(#pdf-remote:not([hidden])) #current-preview {
+        margin: 0 auto auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel notes">
+        <h2>Speaker notes</h2>
+        <p id="notes">Waiting for the NeoPresent viewer…</p>
+      </section>
+      <section class="panel current-panel">
+        <div class="current-header">
+          <div class="current-title-row">
+            <h2>Current slide</h2>
+            <div class="presentation-meta">
+              <p class="muted" id="counter">—</p>
+              <p
+                id="timer"
+                aria-label="Elapsed presentation time"
+                data-presenter-tip="Elapsed presentation time"
+              >
+                00:00
+              </p>
+              <p
+                id="slide-timer"
+                aria-label="Current-slide time that pauses with animation"
+                data-presenter-tip="Current-slide time · pauses with animation"
+              >
+                00:00
+              </p>
+              <p class="muted" id="autoplay-status" hidden>Auto —</p>
+              <p class="muted" id="clock">—</p>
+            </div>
+          </div>
+          <div class="header-controls">
+            <button type="button" data-navigation="previous">Previous</button>
+            <button type="button" data-navigation="next">Next</button>
+            <label class="pointer-symbol" title="Jump directly to a slide number"
+              >Go <input class="jump-input" id="go-to-slide" type="number" min="1" value="1"
+            /></label>
+            <button type="button" id="go-to-slide-button">Go</button>
+            <button type="button" id="slide-search-button">Find slide</button>
+            <button type="button" id="bookmark-toggle" aria-pressed="false">Bookmark</button>
+            <button type="button" id="bookmarks-button">Bookmarks (0)</button>
+            <button type="button" id="timer-toggle">Pause timer</button>
+            <button type="button" id="timer-reset">Reset timer</button>
+            <button type="button" id="autoplay-toggle" hidden>Pause auto</button>
+            <label class="pointer-symbol" title="Temporarily override the audience theme"
+              >Theme
+              <select id="live-theme">
+                <option value="">Deck default</option>
+                <option value="default">Default</option>
+                <option value="midnight">Midnight</option>
+                <option value="light">Light</option>
+                <option value="paper">Paper</option>
+                <option value="fyma">Fyma</option>
+                <option value="fyma-green">Fyma · Green</option>
+                <option value="fyma-gray">Fyma · Gray</option>
+                <option value="fyma-brown">Fyma · Brown</option>
+                <option value="fyma-orange">Fyma · Orange</option>
+                <option value="ciment">Ciment</option>
+              </select>
+            </label>
+            <label class="pointer-symbol" title="Temporarily override the slide aspect ratio"
+              >Aspect
+              <select id="live-aspect">
+                <option value="">Deck default</option>
+                <option value="16:9">16:9</option>
+                <option value="16:10">16:10</option>
+                <option value="5:4">5:4</option>
+                <option value="4:3">4:3</option>
+                <option value="3:2">3:2</option>
+                <option value="1:1">1:1</option>
+              </select>
+            </label>
+            <button type="button" id="layout-reset">Reset layout</button>
+          </div>
+        </div>
+        <aside id="pdf-remote" aria-label="Audience PDF controls" hidden>
+          <span class="pdf-remote-label">PDF remote</span>
+          <button type="button" data-pdf-control="previous-pdf" title="Previous PDF">PDF ◀</button>
+          <button type="button" data-pdf-control="next-pdf" title="Next PDF">PDF ▶</button>
+          <span class="pdf-remote-divider" aria-hidden="true"></span>
+          <button type="button" data-pdf-control="scroll-left" title="Pan left">←</button>
+          <button type="button" data-pdf-control="scroll-up" title="Scroll up">↑</button>
+          <button type="button" data-pdf-control="scroll-down" title="Scroll down">↓</button>
+          <button type="button" data-pdf-control="scroll-right" title="Pan right">→</button>
+          <span class="pdf-remote-divider" aria-hidden="true"></span>
+          <button type="button" data-pdf-control="zoom-out" title="Zoom out">−</button>
+          <button type="button" data-pdf-control="fit" title="Fit width">Fit</button>
+          <button type="button" data-pdf-control="zoom-in" title="Zoom in">+</button>
+          <span id="pdf-remote-status" aria-live="polite">100% · PDF 1/1</span>
+          <button type="button" data-pdf-control="exit" title="Exit PDF inspection">×</button>
+        </aside>
+        <div class="slide-preview" id="current-preview">Waiting for slide data…</div>
+        <div class="controls">
+          <button type="button" id="shortcuts-button">Shortcuts</button>
+          <button type="button" id="audience-blank" aria-pressed="false">Blank audience</button>
+          <button type="button" id="laser-toggle" aria-pressed="false">Laser</button>
+          <span class="control-group" id="laser-controls">
+            <label class="pointer-symbol" title="Optional pointer character, for example ✍"
+              >Pointer <input id="laser-symbol" maxlength="8" placeholder="●"
+            /></label>
+            <label class="pointer-symbol" title="Choose a ready-made pointer character"
+              >Preset
+              <select id="laser-preset">
+                <option value="">Dot</option>
+                <option value="✍︎">✍</option>
+                <option value="🖉︎">🖉</option>
+                <option value="🖊︎">🖊</option>
+                <option value="🖋︎">🖋</option>
+                <option value="➤">➤</option>
+              </select>
+            </label>
+            <label class="pointer-symbol" title="Load a local font for the pointer"
+              >Font
+              <input
+                id="laser-font-file"
+                type="file"
+                accept=".woff,.woff2,.ttf,.otf,font/woff,font/woff2,font/ttf,font/otf"
+            /></label>
+          </span>
+          <button type="button" id="spotlight-toggle" aria-pressed="false">Spotlight</button>
+          <span class="control-group" id="spotlight-controls">
+            <label class="pointer-symbol" title="Diameter of the spotlight"
+              >Spot size
+              <input
+                class="annotation-size"
+                id="spotlight-size"
+                type="range"
+                min="8"
+                max="40"
+                value="14"
+            /></label>
+            <button type="button" id="spotlight-ring-toggle" aria-pressed="false">Ring off</button>
+            <label class="pointer-symbol" title="Color of the spotlight outline"
+              >Ring
+              <input
+                class="annotation-color"
+                id="spotlight-ring-color"
+                type="color"
+                value="#ff3b30"
+            /></label>
+            <label class="pointer-symbol" title="Thickness of the spotlight outline"
+              >Ring size
+              <input
+                class="annotation-size"
+                id="spotlight-ring-size"
+                type="range"
+                min="1"
+                max="12"
+                value="2"
+            /></label>
+          </span>
+          <button type="button" id="annotation-toggle" aria-pressed="false">Annotate</button>
+          <button type="button" id="annotation-eraser" aria-pressed="false">⌫ Eraser</button>
+          <span class="control-group" id="annotation-controls">
+            <label class="pointer-symbol" title="Writing symbol shown at the annotation pointer"
+              >Symbol <input id="annotation-symbol" maxlength="8" value="✍"
+            /></label>
+            <label class="pointer-symbol" title="Choose a ready-made writing symbol"
+              >Preset
+              <select id="annotation-preset">
+                <option value="✍">✍</option>
+                <option value="🖊">🖊</option>
+                <option value="🖌">🖌</option>
+                <option value="🖍">🖍</option>
+              </select>
+            </label>
+            <label class="pointer-symbol" title="Color for new annotation strokes"
+              >Ink
+              <input class="annotation-color" id="annotation-color" type="color" value="#ff3b30"
+            /></label>
+            <label class="pointer-symbol" title="Visual style for new annotation strokes"
+              >Stroke
+              <select id="annotation-stroke">
+                <option value="chalk" selected>Chalk</option>
+                <option value="pen">Pen</option>
+                <option value="marker">Marker</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+              </select>
+            </label>
+            <label class="pointer-symbol" title="Thickness for new annotation strokes"
+              >Size
+              <input
+                class="annotation-size"
+                id="annotation-size"
+                type="range"
+                min="2"
+                max="24"
+                value="8"
+            /></label>
+            <button type="button" id="annotation-undo">Undo ink</button>
+            <button type="button" id="annotation-redo">Redo ink</button>
+            <button
+              type="button"
+              id="annotation-save"
+              title="Download annotations from all slides as vector path data"
+            >Save ink</button>
+            <button type="button" id="annotation-clear">Clear ink</button>
+          </span>
+        </div>
+      </section>
+      <section class="panel adjacent-panel">
+        <div class="adjacent-previews">
+          <div class="adjacent-slide">
+            <h2 class="adjacent-slide-label">Previous</h2>
+            <div class="slide-preview" id="previous-preview">—</div>
+          </div>
+          <div class="adjacent-slide">
+            <h2 class="adjacent-slide-label">Next</h2>
+            <div class="slide-preview" id="next-preview">—</div>
+          </div>
+        </div>
+      </section>
+      <div
+        class="resize-handle vertical"
+        id="notes-resizer"
+        role="separator"
+        aria-label="Resize speaker notes panel"
+        aria-orientation="vertical"
+        tabindex="0"
+      ></div>
+      <div
+        class="resize-handle horizontal"
+        id="preview-resizer"
+        role="separator"
+        aria-label="Resize slide preview panels"
+        aria-orientation="horizontal"
+        tabindex="0"
+      ></div>
+    </main>
+    <div
+      class="shortcut-dialog"
+      id="shortcut-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shortcut-title"
+    >
+      <div class="shortcut-card" id="shortcut-card" tabindex="-1">
+        <h2 id="shortcut-title">Presenter shortcuts</h2>
+        <div class="shortcut-grid">
+          <kbd>← / →</kbd><span>Previous / next slide or reveal</span> <kbd>Home / End</kbd
+          ><span>First / last slide</span> <kbd>F</kbd><span>Find and jump to a slide</span>
+          <kbd>M</kbd><span>Bookmark or unbookmark the current slide</span> <kbd>L</kbd
+          ><span>Toggle laser</span> <kbd>S</kbd><span>Toggle spotlight</span> <kbd>A</kbd
+          ><span>Toggle annotation</span> <kbd>E</kbd><span>Toggle annotation eraser</span>
+          <kbd>N</kbd><span>Toggle audience notes</span> <kbd>O</kbd
+          ><span>Cycle audience overview</span> <kbd>T</kbd><span>Toggle audience TOC</span>
+          <kbd>V</kbd><span>Toggle audience filmstrip</span> <kbd>Enter</kbd
+          ><span>Select focused overview slide</span> <kbd>0</kbd
+          ><span>Exit audience overview</span> <kbd>C</kbd><span>Toggle audience controls</span>
+          <kbd>P</kbd><span>Toggle audience PDF mode</span> <kbd>⌘Z / Ctrl+Z</kbd
+          ><span>Undo ink</span> <kbd>⌘⇧Z / Ctrl+Shift+Z</kbd><span>Redo ink</span> <kbd>B</kbd
+          ><span>Blank / resume audience</span> <kbd>+ / − / =</kbd
+          ><span>PDF zoom in / out / fit</span> <kbd>Shift+↑ / Shift+↓</kbd
+          ><span>Previous / next PDF</span> <kbd>H / ?</kbd><span>Show or hide this panel</span>
+        </div>
+      </div>
+    </div>
+    <div
+      class="shortcut-dialog"
+      id="slide-search-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="slide-search-title"
+    >
+      <div class="shortcut-card">
+        <h2 id="slide-search-title">Find a slide</h2>
+        <input
+          class="jump-input"
+          id="slide-search-input"
+          type="search"
+          placeholder="Search slide titles…"
+          aria-label="Search slide titles"
+        />
+        <div class="slide-search-results" id="slide-search-results"></div>
+        <button type="button" id="slide-search-close">Close</button>
+      </div>
+    </div>
+    <div
+      class="shortcut-dialog"
+      id="bookmarks-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bookmarks-title"
+    >
+      <div class="shortcut-card">
+        <h2 id="bookmarks-title">Bookmarks</h2>
+        <div class="bookmark-list" id="bookmark-list">No bookmarked slides yet.</div>
+        <button type="button" id="bookmarks-close">Close</button>
+      </div>
+    </div>
+    <script type="module">
+      import { highlightCode } from './src/neo/syntaxHighlight.mjs';
+      import {
+        createFeynmanMarkup,
+        createScientificChartMarkup
+      } from './src/neo/createSlideView.mjs';
+      const channel = new BroadcastChannel('neopresent-presenter');
+      const pdfRemote = document.querySelector('#pdf-remote');
+      const pdfRemoteStatus = document.querySelector('#pdf-remote-status');
+      const pairedReloadStorageKey = 'neopresent-paired-reload-source';
+      let announcePresenterReload = false;
+      let awaitingViewerReload = false;
+      let notifyAudiencePreviewReady = false;
+      try {
+        const pairedReloadSource = sessionStorage.getItem(pairedReloadStorageKey);
+        if (pairedReloadSource === 'viewer') sessionStorage.removeItem(pairedReloadStorageKey);
+        else
+          announcePresenterReload =
+            performance.getEntriesByType('navigation')[0]?.type === 'reload';
+        awaitingViewerReload = announcePresenterReload;
+        if (awaitingViewerReload)
+          document.documentElement.classList.add('neopresent-paired-reload-hold');
+      } catch {
+        // Paired refresh is optional when browser session storage is unavailable.
+      }
+      const pairedReloadStyle = document.createElement('style');
+      pairedReloadStyle.textContent =
+        '.neopresent-paired-reload-hold #current-preview * { animation-play-state: paused !important; }';
+      document.head.append(pairedReloadStyle);
+      const chartTooltipStorageKey = 'neopresent-chart-tooltip';
+      const publishChartTooltip = (payload) => {
+        channel.postMessage(payload);
+        try {
+          localStorage.setItem(
+            chartTooltipStorageKey,
+            JSON.stringify({ ...payload, nonce: Date.now() })
+          );
+        } catch {
+          /* BroadcastChannel remains the primary transport. */
+        }
+      };
+      const controlChannel = new BroadcastChannel('neopresent-presenter-controls');
+      const spotlightChannel = new BroadcastChannel('neopresent-spotlight');
+      const spotlightRingChannel = new BroadcastChannel('neopresent-spotlight-ring');
+      const pollChannel = new BroadcastChannel('neopresent-polls');
+      const pollCounts = new Map();
+      let startedAt = null;
+      let elapsedSeconds = 0;
+      let slideTimerElapsedMs = 0;
+      let slideTimerRunningSince = performance.now();
+      let slideTimerPaused = false;
+      let slideTimerSlideIndex = -1;
+      let timerRunning = true;
+      let autoplayConfigured = false;
+      let autoplayRunning = false;
+      let autoplayDeadline = 0;
+      let laserEnabled = false;
+      let spotlightEnabled = false;
+      let spotlightRingEnabled = false;
+      let latestPointerPosition = { x: 0.5, y: 0.5 };
+      let laserPointer;
+      let activeLaserFont = 'system-ui, sans-serif';
+      let activeLaserFontData = '';
+      let audienceBlanked = false;
+      let audienceOverview = false;
+      let audiencePdfMode = '';
+      let annotationEnabled = false;
+      let annotationEraserEnabled = false;
+      let annotationCursor;
+      let latestAnnotationPosition = { x: 0.5, y: 0.5 };
+      let activeSlideIndex = 0;
+      let annotationLayer;
+      let annotationPaths = [];
+      let activeAnnotationPath = null;
+      let presentationSlides = [];
+      let deckPreviewSlides = [];
+      let totalSlides = 0;
+      let presenterTocOpen = false;
+      let presenterFilmstripOpen = false;
+      let renderedPreviewKey = '';
+      let audienceReadySlideIndex = -1;
+      let pendingPreviewState;
+      let presenterTheme = {
+        accent: '#818cf8',
+        background: '#0b1020',
+        border: '#31416b',
+        codeString: '#a5b4fc',
+        foreground: '#e8eeff',
+        muted: '#a8b3cf',
+        panel: '#111a31',
+        surface: '#17213d'
+      };
+      const bookmarksStorageKey = 'neopresent-presenter-bookmarks';
+
+      pollChannel.onmessage = (event) => {
+        const { id, index, optionCount, type } = event.data || {};
+        if (type !== 'vote' || !id || !Number.isInteger(index)) return;
+        const counts =
+          pollCounts.get(id) || Array.from({ length: Number(optionCount) || 0 }, () => 0);
+        counts[index] = (counts[index] || 0) + 1;
+        pollCounts.set(id, counts);
+        document.querySelectorAll(`[data-poll-id="${CSS.escape(id)}"]`).forEach((poll) => {
+          poll.querySelectorAll('[data-poll-count]').forEach((item) => {
+            item.textContent = String(counts[Number(item.dataset.pollCount)] || 0);
+          });
+        });
+      };
+      let bookmarkedSlideIndexes = new Set();
+      try {
+        bookmarkedSlideIndexes = new Set(
+          JSON.parse(localStorage.getItem(bookmarksStorageKey) || '[]')
+        );
+      } catch {
+        bookmarkedSlideIndexes = new Set();
+      }
+      const annotationsBySlide = new Map();
+      const annotationRedoBySlide = new Map();
+      const updateTimer = () => {
+        document.querySelector('#timer').textContent =
+          `${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
+        const slideElapsedMs =
+          slideTimerElapsedMs + (slideTimerPaused ? 0 : performance.now() - slideTimerRunningSince);
+        const slideElapsedSeconds = Math.max(0, Math.floor(slideElapsedMs / 1000));
+        document.querySelector('#slide-timer').textContent =
+          `${String(Math.floor(slideElapsedSeconds / 60)).padStart(2, '0')}:${String(slideElapsedSeconds % 60).padStart(2, '0')}`;
+        document.querySelector('#clock').textContent = new Intl.DateTimeFormat(undefined, {
+          hour: 'numeric',
+          minute: '2-digit'
+        }).format(new Date());
+        const autoplayStatus = document.querySelector('#autoplay-status');
+        autoplayStatus.hidden = !autoplayConfigured;
+        if (autoplayConfigured) {
+          const remainingSeconds = Math.max(0, Math.ceil((autoplayDeadline - Date.now()) / 1000));
+          autoplayStatus.textContent = autoplayRunning
+            ? `Auto ${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`
+            : 'Auto paused';
+        }
+      };
+      const applyTheme = (theme) => {
+        if (!theme) return;
+        const properties = {
+          accent: '--np-accent',
+          background: '--np-background',
+          border: '--np-border',
+          codeString: '--np-code-string',
+          foreground: '--np-foreground',
+          muted: '--np-muted',
+          panel: '--np-panel',
+          surface: '--np-surface'
+        };
+        Object.entries(properties).forEach(([key, property]) => {
+          if (typeof theme[key] === 'string')
+            document.documentElement.style.setProperty(property, theme[key]);
+        });
+      };
+      const renderPresenterPreviews = (state) => {
+        // Audience PDF inspection changes only the viewer's rendering surface.
+        // The presenter deliberately keeps PDF.js canvas previews, so including
+        // pdfMode here needlessly destroys and rebuilds all three previews.
+        const previewKey = `${state.activeIndex}:${state.currentSlide?.revealIndex ?? ''}:${state.liveTheme || ''}:${state.liveAspect || ''}`;
+        if (previewKey === renderedPreviewKey) return;
+        renderedPreviewKey = previewKey;
+        renderSlide(document.querySelector('#current-preview'), state.currentSlide);
+        renderSlide(document.querySelector('#previous-preview'), state.previousSlide);
+        renderSlide(document.querySelector('#next-preview'), state.nextSlide);
+        mountPresenterOverlays();
+        updatePresenterAnimationPauseTip();
+        if (notifyAudiencePreviewReady) {
+          notifyAudiencePreviewReady = false;
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              document.documentElement.classList.remove('neopresent-paired-reload-hold');
+              channel.postMessage({ type: 'presenter-preview-ready' });
+            })
+          );
+        }
+      };
+      channel.onmessage = (event) => {
+        const state = event.data;
+        if (state?.type === 'pdf-control-state') {
+          if (state.active) {
+            const zoom = Math.round((Number(state.zoom) || 1) * 100);
+            const index = Math.max(1, Number(state.pdfIndex || 0) + 1);
+            const count = Math.max(1, Number(state.pdfCount || 1));
+            pdfRemoteStatus.textContent = `${zoom}% · PDF ${index}/${count}`;
+          }
+          return;
+        }
+        if (state?.type === 'viewer-reload-complete') {
+          awaitingViewerReload = false;
+          notifyAudiencePreviewReady = true;
+          channel.postMessage({ type: 'request-state', refresh: true });
+          channel.postMessage({ type: 'request-deck' });
+          return;
+        }
+        if (state?.type === 'viewer-window-refreshed') {
+          try {
+            sessionStorage.setItem(pairedReloadStorageKey, 'viewer');
+            window.location.reload();
+          } catch {
+            // Do not interrupt a presentation if browser storage is unavailable.
+          }
+          return;
+        }
+        if (state?.type === 'audience-slide-ready') {
+          if (awaitingViewerReload) return;
+          audienceReadySlideIndex = state.index;
+          if (pendingPreviewState?.activeIndex === audienceReadySlideIndex) {
+            renderPresenterPreviews(pendingPreviewState);
+            pendingPreviewState = undefined;
+          }
+          return;
+        }
+        if (state?.type === 'deck') {
+          deckPreviewSlides = state.slides || [];
+          presenterFilmstripPanel?.replaceChildren();
+          if (presenterFilmstripOpen) {
+            mountPresenterOverlays();
+            requestAnimationFrame(renderPresenterFilmstrip);
+          }
+          return;
+        }
+        if (state?.type === 'request-laser-font') {
+          if (activeLaserFontData) {
+            channel.postMessage({
+              type: 'laser-font',
+              font: activeLaserFont,
+              fontData: activeLaserFontData
+            });
+          }
+          return;
+        }
+        if (state?.type !== 'state' || awaitingViewerReload) return;
+        document.title = 'NeoPresent Presenter';
+        presenterTheme = state.theme || presenterTheme;
+        applyTheme(state.theme);
+        presentationSlides = state.slides || presentationSlides;
+        if (deckPreviewSlides.length === 0) channel.postMessage({ type: 'request-deck' });
+        totalSlides = state.totalSlides ?? totalSlides;
+        setMathAwareText(
+          document.querySelector('#notes'),
+          state.notes || 'No speaker notes for this slide.'
+        );
+        document.querySelector('#counter').textContent =
+          `${state.activeIndex + 1}/${state.totalSlides}`;
+        elapsedSeconds = state.elapsedSeconds ?? elapsedSeconds;
+        timerRunning = state.timerRunning ?? timerRunning;
+        autoplayConfigured = state.autoplayConfigured ?? autoplayConfigured;
+        autoplayRunning = state.autoplayRunning ?? autoplayRunning;
+        autoplayDeadline = state.autoplayDeadline ?? autoplayDeadline;
+        const exitedAudienceOverview = audienceOverview && state.overview !== true;
+        audienceOverview = state.overview === true;
+        const previousPdfMode = audiencePdfMode;
+        audiencePdfMode = state.pdfMode || '';
+        pdfRemote.hidden = audiencePdfMode !== 'viewer';
+        if (audiencePdfMode === 'viewer' && previousPdfMode !== 'viewer') {
+          pdfRemoteStatus.textContent = '100% · PDF 1/1';
+          channel.postMessage({ type: 'pdf-control', action: 'state' });
+          setTimeout(() => channel.postMessage({ type: 'pdf-control', action: 'state' }), 420);
+        }
+        if (exitedAudienceOverview) {
+          // Overview exit rebuilds the audience slide. Rebuild the presenter
+          // preview as well, and wait for the audience's new first frame.
+          audienceReadySlideIndex = -1;
+          renderedPreviewKey = '';
+          notifyAudiencePreviewReady = true;
+          document.documentElement.classList.add('neopresent-paired-reload-hold');
+        }
+        document.querySelector('#live-theme').value = state.liveTheme || '';
+        document.querySelector('#live-aspect').value = state.liveAspect || '';
+        document.querySelector('#timer-toggle').textContent = timerRunning
+          ? 'Pause timer'
+          : 'Resume timer';
+        autoplayToggle.hidden = !state.autoplayConfigured;
+        autoplayToggle.textContent = state.autoplayRunning ? 'Pause auto' : 'Resume auto';
+        const slideNumberInput = document.querySelector('#go-to-slide');
+        slideNumberInput.max = String(state.totalSlides);
+        if (document.activeElement !== slideNumberInput)
+          slideNumberInput.value = String(state.activeIndex + 1);
+        const previewKey = `${state.activeIndex}:${state.currentSlide?.revealIndex ?? ''}:${state.liveTheme || ''}:${state.liveAspect || ''}`;
+        if (previewKey !== renderedPreviewKey) {
+          if (audienceReadySlideIndex === state.activeIndex) renderPresenterPreviews(state);
+          else pendingPreviewState = state;
+        }
+        if (activeSlideIndex !== state.activeIndex) {
+          setPresenterCurrentAnimationsPaused(false);
+          activeSlideIndex = state.activeIndex;
+          annotationPaths = annotationsBySlide.get(activeSlideIndex) || [];
+          activeAnnotationPath = null;
+        }
+        if (slideTimerSlideIndex !== state.activeIndex) {
+          slideTimerSlideIndex = state.activeIndex;
+          slideTimerElapsedMs = 0;
+          slideTimerRunningSince = performance.now();
+          slideTimerPaused = presenterCurrentAnimationsPaused;
+        }
+        syncPresenterTocHighlight();
+        updateAdjacentPreviewAvailability();
+        syncBookmarks();
+        renderAnnotations();
+        requestAnimationFrame(sizeCurrentPreview);
+        startedAt = state.startedAt;
+        updateTimer();
+      };
+      setInterval(updateTimer, 1000);
+      setInterval(() => {
+        if (!awaitingViewerReload) channel.postMessage({ type: 'request-state' });
+      }, 1000);
+      if (announcePresenterReload) channel.postMessage({ type: 'presenter-window-refreshed' });
+      else {
+        channel.postMessage({ type: 'request-state', refresh: true });
+        channel.postMessage({ type: 'request-deck' });
+      }
+
+      const navigate = (direction, payload = {}) => {
+        controlChannel.postMessage({ direction, ...payload });
+      };
+      const sendPdfControl = (action) => {
+        if (action === 'exit') navigate('pdf');
+        else channel.postMessage({ type: 'pdf-control', action });
+      };
+      pdfRemote.querySelectorAll('[data-pdf-control]').forEach((button) => {
+        button.addEventListener('click', () => sendPdfControl(button.dataset.pdfControl));
+      });
+      document.querySelectorAll('[data-navigation]').forEach((button) => {
+        button.addEventListener('click', () => navigate(button.dataset.navigation));
+      });
+      document.addEventListener('keydown', (event) => {
+        const editable =
+          event.target instanceof HTMLElement &&
+          event.target.matches(
+            'textarea, [contenteditable="true"], input:not([type="color"]):not([type="range"])'
+          );
+        if (editable) return;
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          if (event.shiftKey) redoAnnotation();
+          else undoAnnotation();
+          return;
+        }
+        const helpShortcut = event.key === '?' || event.key.toLowerCase() === 'h';
+        if (helpShortcut || event.key === 'Escape') {
+          event.preventDefault();
+          if (event.key === 'Escape' && slideSearchOpen) {
+            setSlideSearchOpen(false);
+            return;
+          }
+          if (event.key === 'Escape' && bookmarksOpen) {
+            setBookmarksOpen(false);
+            return;
+          }
+          if (event.key === 'Escape' && shortcutsOpen) {
+            setShortcutsOpen(false);
+            return;
+          }
+          setShortcutsOpen(helpShortcut ? !shortcutsOpen : false);
+          return;
+        }
+        if (event.key === 'Enter' && audienceOverview) {
+          event.preventDefault();
+          navigate('overview-select');
+          return;
+        }
+        if (event.key === '0' && audienceOverview) {
+          event.preventDefault();
+          navigate('overview-close');
+          return;
+        }
+        if (event.key === ' ') {
+          event.preventDefault();
+          const paused = !presenterCurrentAnimationsPaused;
+          setPresenterCurrentAnimationsPaused(paused);
+          navigate('set-animations-paused', { paused });
+          return;
+        }
+        if (event.key === 'p' || event.key === 'P') {
+          event.preventDefault();
+          navigate('pdf');
+          return;
+        }
+        if (audiencePdfMode === 'viewer') {
+          const pdfKeyActions = {
+            '+': 'zoom-in',
+            '-': 'zoom-out',
+            '=': 'fit',
+            r: 'fit',
+            R: 'fit',
+            ArrowLeft: 'scroll-left',
+            ArrowRight: 'scroll-right',
+            ArrowUp: event.shiftKey ? 'previous-pdf' : 'scroll-up',
+            ArrowDown: event.shiftKey ? 'next-pdf' : 'scroll-down',
+            PageUp: 'previous-pdf',
+            PageDown: 'next-pdf'
+          };
+          const action = pdfKeyActions[event.key];
+          if (action) {
+            event.preventDefault();
+            sendPdfControl(action);
+            return;
+          }
+        }
+        if (event.key === 'f' || event.key === 'F') {
+          event.preventDefault();
+          setSlideSearchOpen(true);
+          return;
+        }
+        if (event.key === 'm' || event.key === 'M') {
+          event.preventDefault();
+          toggleBookmark(activeSlideIndex);
+          return;
+        }
+        if (event.key === 'l' || event.key === 'L') {
+          event.preventDefault();
+          setLaserEnabled(!laserEnabled);
+          return;
+        }
+        if (event.key === 'n' || event.key === 'N') {
+          event.preventDefault();
+          navigate('notes');
+          return;
+        }
+        if (event.key === 't' || event.key === 'T') {
+          event.preventDefault();
+          presenterTocOpen = !presenterTocOpen;
+          mountPresenterOverlays();
+          navigate('toc');
+          return;
+        }
+        if (event.key === 'v' || event.key === 'V') {
+          event.preventDefault();
+          presenterFilmstripOpen = !presenterFilmstripOpen;
+          mountPresenterOverlays();
+          navigate('filmstrip');
+          return;
+        }
+        if (event.key === 'o' || event.key === 'O') {
+          event.preventDefault();
+          navigate('overview');
+          return;
+        }
+        if (event.key === 'c' || event.key === 'C') {
+          event.preventDefault();
+          navigate('controls');
+          return;
+        }
+        if (event.key === 's' || event.key === 'S') {
+          event.preventDefault();
+          setSpotlightEnabled(!spotlightEnabled);
+          return;
+        }
+        if (event.key === 'b' || event.key === 'B') {
+          event.preventDefault();
+          setAudienceBlanked(!audienceBlanked);
+          return;
+        }
+        if (event.key === 'a' || event.key === 'A') {
+          event.preventDefault();
+          setAnnotationEnabled(!annotationEnabled);
+          return;
+        }
+        if (event.key === 'e' || event.key === 'E') {
+          event.preventDefault();
+          setAnnotationEraserEnabled(!annotationEraserEnabled);
+          return;
+        }
+        const keys = {
+          ArrowRight: 'next',
+          ArrowDown: 'next',
+          PageDown: 'next',
+          ArrowLeft: 'previous',
+          ArrowUp: 'previous',
+          PageUp: 'previous',
+          Home: 'first',
+          End: 'last'
+        };
+        const direction = keys[event.key];
+        if (!direction) return;
+        event.preventDefault();
+        navigate(direction);
+      });
+
+      const laserToggle = document.querySelector('#laser-toggle');
+      const laserControls = document.querySelector('#laser-controls');
+      const spotlightToggle = document.querySelector('#spotlight-toggle');
+      const spotlightControls = document.querySelector('#spotlight-controls');
+      const spotlightSize = document.querySelector('#spotlight-size');
+      const spotlightRingToggle = document.querySelector('#spotlight-ring-toggle');
+      const spotlightRingColor = document.querySelector('#spotlight-ring-color');
+      const spotlightRingSize = document.querySelector('#spotlight-ring-size');
+      const audienceBlank = document.querySelector('#audience-blank');
+      const goToSlideInput = document.querySelector('#go-to-slide');
+      const goToSlideButton = document.querySelector('#go-to-slide-button');
+      const timerToggle = document.querySelector('#timer-toggle');
+      const timerReset = document.querySelector('#timer-reset');
+      const autoplayToggle = document.querySelector('#autoplay-toggle');
+      const layoutReset = document.querySelector('#layout-reset');
+      const liveTheme = document.querySelector('#live-theme');
+      const liveAspect = document.querySelector('#live-aspect');
+      const shortcutsButton = document.querySelector('#shortcuts-button');
+      const shortcutsDialog = document.querySelector('#shortcut-dialog');
+      const shortcutsCard = document.querySelector('#shortcut-card');
+      const slideSearchButton = document.querySelector('#slide-search-button');
+      const slideSearchDialog = document.querySelector('#slide-search-dialog');
+      const slideSearchInput = document.querySelector('#slide-search-input');
+      const slideSearchResults = document.querySelector('#slide-search-results');
+      const slideSearchClose = document.querySelector('#slide-search-close');
+      const bookmarkToggle = document.querySelector('#bookmark-toggle');
+      const bookmarksButton = document.querySelector('#bookmarks-button');
+      const bookmarksDialog = document.querySelector('#bookmarks-dialog');
+      const bookmarkList = document.querySelector('#bookmark-list');
+      const bookmarksClose = document.querySelector('#bookmarks-close');
+      const annotationToggle = document.querySelector('#annotation-toggle');
+      const annotationEraser = document.querySelector('#annotation-eraser');
+      const annotationControls = document.querySelector('#annotation-controls');
+      const annotationClear = document.querySelector('#annotation-clear');
+      const annotationUndo = document.querySelector('#annotation-undo');
+      const annotationRedo = document.querySelector('#annotation-redo');
+      const annotationSave = document.querySelector('#annotation-save');
+      const annotationColor = document.querySelector('#annotation-color');
+      const annotationStroke = document.querySelector('#annotation-stroke');
+      const annotationSize = document.querySelector('#annotation-size');
+      const annotationSymbol = document.querySelector('#annotation-symbol');
+      const annotationPreset = document.querySelector('#annotation-preset');
+      const currentPreview = document.querySelector('#current-preview');
+      const previousPreview = document.querySelector('#previous-preview');
+      const nextPreview = document.querySelector('#next-preview');
+      let presenterCurrentAnimationsPaused = false;
+      const pausedPresenterAnimations = new Set();
+      let presenterAnimationPauseTip;
+      const updatePresenterAnimationPauseTip = () => {
+        if (!presenterAnimationPauseTip) {
+          presenterAnimationPauseTip = document.createElement('div');
+          presenterAnimationPauseTip.className = 'presenter-animation-pause-tip';
+          presenterAnimationPauseTip.textContent = 'Animation paused · Space to resume';
+        }
+        if (!currentPreview.contains(presenterAnimationPauseTip))
+          currentPreview.append(presenterAnimationPauseTip);
+        presenterAnimationPauseTip.hidden = !presenterCurrentAnimationsPaused;
+      };
+      const pausePresenterCurrentAnimations = () => {
+        document.getAnimations().forEach((animation) => {
+          const target = animation.effect?.target;
+          if (!(target instanceof Element) || !currentPreview.contains(target)) return;
+          if (!['pending', 'running'].includes(animation.playState)) return;
+          animation.pause();
+          pausedPresenterAnimations.add(animation);
+        });
+      };
+      const keepPresenterCurrentAnimationsPaused = (framesRemaining = 8) => {
+        pausePresenterCurrentAnimations();
+        if (!presenterCurrentAnimationsPaused || framesRemaining <= 0) return;
+        requestAnimationFrame(() => keepPresenterCurrentAnimationsPaused(framesRemaining - 1));
+      };
+      const setPresenterCurrentAnimationsPaused = (paused) => {
+        if (presenterCurrentAnimationsPaused === paused) {
+          updatePresenterAnimationPauseTip();
+          return;
+        }
+        presenterCurrentAnimationsPaused = paused;
+        if (paused && !slideTimerPaused) {
+          slideTimerElapsedMs += performance.now() - slideTimerRunningSince;
+          slideTimerPaused = true;
+        } else if (!paused && slideTimerPaused) {
+          slideTimerRunningSince = performance.now();
+          slideTimerPaused = false;
+        }
+        updatePresenterAnimationPauseTip();
+        updateTimer();
+        if (paused) {
+          keepPresenterCurrentAnimationsPaused();
+          return;
+        }
+        pausedPresenterAnimations.forEach((animation) => {
+          if (animation.playState === 'paused') animation.play();
+        });
+        pausedPresenterAnimations.clear();
+      };
+      new MutationObserver(() => {
+        if (presenterCurrentAnimationsPaused)
+          requestAnimationFrame(() => keepPresenterCurrentAnimationsPaused());
+      }).observe(currentPreview, {
+        attributeFilter: ['class', 'style'],
+        attributes: true,
+        childList: true,
+        subtree: true
+      });
+      const presenterTocPanel = document.createElement('nav');
+      presenterTocPanel.className = 'presenter-slide-overlay presenter-toc-overlay';
+      presenterTocPanel.setAttribute('aria-label', 'Table of contents');
+      const presenterFilmstripPanel = document.createElement('div');
+      presenterFilmstripPanel.className = 'presenter-slide-overlay presenter-filmstrip-overlay';
+      presenterFilmstripPanel.setAttribute('aria-label', 'Slide filmstrip');
+      const laserSymbol = document.querySelector('#laser-symbol');
+      const laserPreset = document.querySelector('#laser-preset');
+      const laserFontFile = document.querySelector('#laser-font-file');
+      const chartTooltip = document.createElement('div');
+      chartTooltip.className = 'chart-tooltip';
+      document.body.append(chartTooltip);
+      const setMathAwareText = (host, text) => {
+        host.replaceChildren();
+        const pattern = /\$\$([^$]+)\$\$|\$([^$\n]+)\$/g;
+        let cursor = 0;
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          host.append(document.createTextNode(text.slice(cursor, match.index)));
+          const math = document.createElement('span');
+          math.dataset.katexSource = (match[1] || match[2]).trim();
+          math.dataset.katexDisplay = match[1] ? 'display' : 'inline';
+          host.append(math);
+          cursor = match.index + match[0].length;
+        }
+        host.append(document.createTextNode(text.slice(cursor)));
+        host
+          .querySelectorAll('[data-katex-source]')
+          .forEach((math) =>
+            renderMathPreview(
+              math,
+              math.dataset.katexSource || '',
+              math.dataset.katexDisplay === 'display'
+            )
+          );
+      };
+      const syncPresenterTocHighlight = () => {
+        presenterTocPanel
+          .querySelectorAll('.presenter-toc-entry')
+          .forEach((entry) =>
+            entry.classList.toggle(
+              'is-current',
+              Number(entry.dataset.slideIndex) === activeSlideIndex
+            )
+          );
+      };
+      const renderPresenterToc = () => {
+        presenterTocPanel.replaceChildren();
+        let sectionStarted = false;
+        let entryNumber = 0;
+        presentationSlides
+          .filter((slide) => slide.tocVisible !== false)
+          .forEach((slide) => {
+            const section = slide.section === true;
+            const child = sectionStarted && !section;
+            if (section) sectionStarted = true;
+            entryNumber += 1;
+            const entry = document.createElement('button');
+            entry.type = 'button';
+            entry.className = `presenter-toc-entry${section ? ' is-section' : ''}${child ? ' is-child' : ''}`;
+            entry.dataset.slideIndex = String(slide.index);
+            const number = document.createElement('span');
+            number.textContent = `${entryNumber}.`;
+            const title = document.createElement('span');
+            setMathAwareText(title, slide.title);
+            entry.append(number, title);
+            const publishTocFocus = () =>
+              controlChannel.postMessage({
+                direction: 'toc-focus',
+                index: slide.index
+              });
+            entry.addEventListener('mouseenter', publishTocFocus);
+            entry.addEventListener('focus', publishTocFocus);
+            entry.addEventListener('click', () =>
+              channel.postMessage({
+                type: 'navigate',
+                direction: 'goto',
+                index: slide.index
+              })
+            );
+            presenterTocPanel.append(entry);
+          });
+        syncPresenterTocHighlight();
+      };
+      presenterTocPanel.addEventListener('mouseleave', () => {
+        controlChannel.postMessage({ direction: 'toc-focus', index: null });
+      });
+      presenterTocPanel.addEventListener('focusout', (event) => {
+        if (!presenterTocPanel.contains(event.relatedTarget)) {
+          controlChannel.postMessage({ direction: 'toc-focus', index: null });
+        }
+      });
+      const renderPresenterFilmstrip = () => {
+        presenterFilmstripPanel.replaceChildren();
+        deckPreviewSlides.forEach((slide) => {
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = 'slide-preview presenter-filmstrip-card';
+          card.title = `${slide.index + 1}. ${slide.title}`;
+          presenterFilmstripPanel.append(card);
+          renderSlide(card, slide.preview);
+          const pageNumber = document.createElement('span');
+          pageNumber.className = 'presenter-filmstrip-page-number';
+          pageNumber.setAttribute('aria-hidden', 'true');
+          pageNumber.textContent = String(slide.index + 1);
+          card.append(pageNumber);
+          card.addEventListener('click', () =>
+            channel.postMessage({
+              type: 'navigate',
+              direction: 'goto',
+              index: slide.index
+            })
+          );
+        });
+      };
+      const mountPresenterOverlays = () => {
+        renderPresenterToc();
+        currentPreview.append(presenterTocPanel, presenterFilmstripPanel);
+        presenterTocPanel.classList.toggle('is-open', presenterTocOpen);
+        presenterFilmstripPanel.classList.toggle('is-open', presenterFilmstripOpen);
+        if (presenterFilmstripOpen && presenterFilmstripPanel.childElementCount === 0) {
+          requestAnimationFrame(renderPresenterFilmstrip);
+        }
+      };
+      presenterFilmstripPanel.addEventListener(
+        'scroll',
+        () => {
+          const maximum = Math.max(
+            0,
+            presenterFilmstripPanel.scrollWidth - presenterFilmstripPanel.clientWidth
+          );
+          channel.postMessage({
+            type: 'filmstrip-scroll',
+            ratio: maximum > 0 ? presenterFilmstripPanel.scrollLeft / maximum : 0
+          });
+        },
+        { passive: true }
+      );
+      document.addEventListener(
+        'wheel',
+        (event) => {
+          if (!presenterFilmstripOpen || event.ctrlKey) return;
+          const bounds = presenterFilmstripPanel.getBoundingClientRect();
+          const insidePanel =
+            event.clientX >= bounds.left &&
+            event.clientX <= bounds.right &&
+            event.clientY >= bounds.top &&
+            event.clientY <= bounds.bottom;
+          if (!insidePanel) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
+          const delta =
+            (Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY) * unit;
+          presenterFilmstripPanel.scrollBy({
+            left: delta * 1.8,
+            behavior: 'auto'
+          });
+        },
+        { capture: true, passive: false }
+      );
+      let activeChartMark;
+      const setActiveChartMark = (mark) => {
+        if (activeChartMark === mark) return;
+        if (activeChartMark?.dataset.neopresentTooltipOriginalRadius) {
+          activeChartMark.setAttribute(
+            'r',
+            activeChartMark.dataset.neopresentTooltipOriginalRadius
+          );
+          delete activeChartMark.dataset.neopresentTooltipOriginalRadius;
+        }
+        activeChartMark?.removeAttribute('data-neopresent-tooltip-active');
+        activeChartMark = mark || null;
+        activeChartMark?.setAttribute('data-neopresent-tooltip-active', 'true');
+        if (activeChartMark?.tagName?.toLowerCase() === 'circle') {
+          const radius = Number(activeChartMark.getAttribute('r'));
+          if (Number.isFinite(radius) && radius > 0) {
+            activeChartMark.dataset.neopresentTooltipOriginalRadius = String(radius);
+            activeChartMark.setAttribute('r', String(radius * 1.45));
+          }
+        }
+      };
+      const presenterLayout = document.querySelector('main');
+      const notesResizer = document.querySelector('#notes-resizer');
+      const previewResizer = document.querySelector('#preview-resizer');
+      const presenterLayoutStorageKey = 'neopresent-presenter-layout';
+      let savedPresenterLayout = {};
+      try {
+        savedPresenterLayout = JSON.parse(localStorage.getItem(presenterLayoutStorageKey) || '{}');
+      } catch {
+        savedPresenterLayout = {};
+      }
+      let notesPanelWidth = savedPresenterLayout.notesPanelWidth;
+      let currentPanelHeight = savedPresenterLayout.currentPanelHeight;
+      const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum);
+      const layoutMetrics = () => {
+        const bounds = presenterLayout.getBoundingClientRect();
+        const styles = getComputedStyle(presenterLayout);
+        return {
+          bounds,
+          columnGap: Number.parseFloat(styles.columnGap),
+          paddingBottom: Number.parseFloat(styles.paddingBottom),
+          paddingLeft: Number.parseFloat(styles.paddingLeft),
+          paddingRight: Number.parseFloat(styles.paddingRight),
+          paddingTop: Number.parseFloat(styles.paddingTop),
+          rowGap: Number.parseFloat(styles.rowGap)
+        };
+      };
+      const syncResizablePanels = () => {
+        const metrics = layoutMetrics();
+        const availableWidth =
+          metrics.bounds.width - metrics.paddingLeft - metrics.paddingRight - metrics.columnGap;
+        const availableHeight =
+          metrics.bounds.height - metrics.paddingTop - metrics.paddingBottom - metrics.rowGap;
+        if (!Number.isFinite(notesPanelWidth)) {
+          notesPanelWidth = Number.parseFloat(
+            getComputedStyle(presenterLayout).gridTemplateColumns
+          );
+        }
+        if (!Number.isFinite(currentPanelHeight)) {
+          currentPanelHeight = Number.parseFloat(
+            getComputedStyle(presenterLayout).gridTemplateRows
+          );
+        }
+        notesPanelWidth = clamp(notesPanelWidth, 280, Math.max(280, availableWidth - 360));
+        currentPanelHeight = clamp(currentPanelHeight, 250, Math.max(250, availableHeight - 220));
+        presenterLayout.style.gridTemplateColumns = `${notesPanelWidth}px minmax(0, 1fr)`;
+        presenterLayout.style.gridTemplateRows = `${currentPanelHeight}px minmax(0, 1fr)`;
+        notesResizer.style.height = `${availableHeight}px`;
+        notesResizer.style.left = `${metrics.paddingLeft + notesPanelWidth + metrics.columnGap / 2 - 8}px`;
+        notesResizer.style.top = `${metrics.paddingTop}px`;
+        previewResizer.style.left = `${metrics.paddingLeft + notesPanelWidth + metrics.columnGap}px`;
+        previewResizer.style.top = `${metrics.paddingTop + currentPanelHeight + metrics.rowGap / 2 - 8}px`;
+        previewResizer.style.width = `${availableWidth - notesPanelWidth}px`;
+        requestAnimationFrame(sizeCurrentPreview);
+      };
+      const sizeCurrentPreview = () => {
+        const sizePreview = (preview, availableWidth, availableHeight) => {
+          const [aspectWidth, aspectHeight] = getComputedStyle(preview)
+            .aspectRatio.split('/')
+            .map(Number);
+          const previewAspect =
+            aspectWidth > 0 && aspectHeight > 0 ? aspectWidth / aspectHeight : 16 / 9;
+          const safeWidth = Math.max(0, availableWidth);
+          const safeHeight = Math.max(0, availableHeight);
+          const width = Math.max(0, Math.min(safeWidth, safeHeight * previewAspect));
+          preview.style.width = `${width}px`;
+          preview.style.height = `${width / previewAspect}px`;
+          const content = preview.querySelector('.viewer-slide-preview, .preview-content');
+          if (content) fitPreviewContent(preview, content);
+        };
+        const panel = currentPreview.closest('.current-panel');
+        if (!panel) return;
+        const header = panel.querySelector('.current-header');
+        const controls = panel.querySelector('.controls');
+        const pdfRemoteHeight = pdfRemote.hidden
+          ? 0
+          : pdfRemote.offsetHeight + Number.parseFloat(getComputedStyle(pdfRemote).marginBottom);
+        const panelStyle = getComputedStyle(panel);
+        const headerStyle = header ? getComputedStyle(header) : null;
+        const controlsStyle = controls ? getComputedStyle(controls) : null;
+        const availableWidth =
+          panel.clientWidth -
+          Number.parseFloat(panelStyle.paddingLeft) -
+          Number.parseFloat(panelStyle.paddingRight);
+        const availableHeight =
+          panel.clientHeight -
+          Number.parseFloat(panelStyle.paddingTop) -
+          Number.parseFloat(panelStyle.paddingBottom) -
+          (header?.offsetHeight ?? 0) -
+          (controls?.offsetHeight ?? 0) -
+          pdfRemoteHeight -
+          (headerStyle ? Number.parseFloat(headerStyle.marginBottom) : 0) -
+          (controlsStyle ? Number.parseFloat(controlsStyle.marginTop) : 0);
+        sizePreview(currentPreview, availableWidth, availableHeight);
+        [previousPreview, nextPreview].forEach((preview) => {
+          const container = preview.closest('.adjacent-slide');
+          if (!container) return;
+          const label = container.querySelector('.adjacent-slide-label');
+          const containerStyle = getComputedStyle(container);
+          const gap = Number.parseFloat(containerStyle.rowGap || containerStyle.gap) || 0;
+          sizePreview(
+            preview,
+            container.clientWidth,
+            container.clientHeight - (label?.offsetHeight ?? 0) - gap
+          );
+        });
+      };
+      const saveResizablePanels = () => {
+        localStorage.setItem(
+          presenterLayoutStorageKey,
+          JSON.stringify({
+            currentPanelHeight,
+            notesPanelWidth
+          })
+        );
+      };
+      const resetResizablePanels = () => {
+        localStorage.removeItem(presenterLayoutStorageKey);
+        notesPanelWidth = undefined;
+        currentPanelHeight = undefined;
+        presenterLayout.style.removeProperty('grid-template-columns');
+        presenterLayout.style.removeProperty('grid-template-rows');
+        requestAnimationFrame(syncResizablePanels);
+      };
+      const startResizing = (axis, event) => {
+        event.preventDefault();
+        const handle = axis === 'notes' ? notesResizer : previewResizer;
+        handle.classList.add('is-resizing');
+        handle.setPointerCapture(event.pointerId);
+        const update = (pointerEvent) => {
+          const metrics = layoutMetrics();
+          const availableWidth =
+            metrics.bounds.width - metrics.paddingLeft - metrics.paddingRight - metrics.columnGap;
+          const availableHeight =
+            metrics.bounds.height - metrics.paddingTop - metrics.paddingBottom - metrics.rowGap;
+          if (axis === 'notes') {
+            notesPanelWidth = clamp(
+              pointerEvent.clientX - metrics.bounds.left - metrics.paddingLeft,
+              280,
+              Math.max(280, availableWidth - 360)
+            );
+          } else {
+            currentPanelHeight = clamp(
+              pointerEvent.clientY - metrics.bounds.top - metrics.paddingTop,
+              250,
+              Math.max(250, availableHeight - 220)
+            );
+          }
+          syncResizablePanels();
+        };
+        const stop = () => {
+          handle.classList.remove('is-resizing');
+          handle.removeEventListener('pointermove', update);
+          handle.removeEventListener('pointerup', stop);
+          handle.removeEventListener('pointercancel', stop);
+          saveResizablePanels();
+        };
+        handle.addEventListener('pointermove', update);
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+      };
+      notesResizer.addEventListener('pointerdown', (event) => startResizing('notes', event));
+      previewResizer.addEventListener('pointerdown', (event) => startResizing('previews', event));
+      window.addEventListener('resize', syncResizablePanels);
+      const previewResizeObserver = new ResizeObserver(() =>
+        requestAnimationFrame(sizeCurrentPreview)
+      );
+      [currentPreview.closest('.current-panel'), previousPreview.closest('.adjacent-panel')]
+        .filter(Boolean)
+        .forEach((panel) => previewResizeObserver.observe(panel));
+      requestAnimationFrame(syncResizablePanels);
+      const updatePresenterPointer = ({ x, y, visible, symbol }) => {
+        if (!laserPointer || !laserPointer.isConnected) {
+          laserPointer = document.createElement('div');
+          laserPointer.className = 'presenter-pointer';
+          laserPointer.setAttribute('aria-hidden', 'true');
+          currentPreview.append(laserPointer);
+        }
+        const character = symbol || '';
+        laserPointer.textContent = character;
+        laserPointer.classList.toggle('has-symbol', character !== '');
+        laserPointer.style.fontFamily = activeLaserFont;
+        laserPointer.style.setProperty('font-variant-emoji', 'text');
+        laserPointer.style.left = `${x * 100}%`;
+        laserPointer.style.top = `${y * 100}%`;
+        laserPointer.style.opacity = visible ? '1' : '0';
+      };
+      const updateAdjacentPreviewAvailability = () => {
+        previousPreview.classList.toggle('is-unavailable', activeSlideIndex === 0);
+        nextPreview.classList.toggle('is-unavailable', activeSlideIndex >= totalSlides - 1);
+      };
+      const publishSpotlight = (message) => spotlightChannel.postMessage(message);
+      const spotlightRingOptions = () => ({
+        ringColor: spotlightRingColor.value,
+        ringVisible: spotlightRingEnabled,
+        ringWidth: Number(spotlightRingSize.value)
+      });
+      const publishRingStyle = () => {
+        const style = spotlightRingOptions();
+        spotlightRingChannel.postMessage(style);
+        channel.postMessage({ type: 'spotlight-ring-style', ...style });
+      };
+      const sendLaser = (visible, event) => {
+        if (!event) {
+          channel.postMessage({ type: 'laser', visible: false });
+          if (spotlightEnabled) publishSpotlight({ visible: false });
+          if (laserPointer) laserPointer.style.opacity = '0';
+          return;
+        }
+        const bounds = currentPreview.getBoundingClientRect();
+        const pointer = {
+          visible,
+          x: (event.clientX - bounds.left) / bounds.width,
+          y: (event.clientY - bounds.top) / bounds.height,
+          symbol: laserSymbol.value.trim(),
+          font: activeLaserFont,
+          laser: laserEnabled,
+          size: Number(spotlightSize.value),
+          ...spotlightRingOptions()
+        };
+        latestPointerPosition = { x: pointer.x, y: pointer.y };
+        if (laserEnabled) {
+          updatePresenterPointer(pointer);
+        }
+        if (laserEnabled) {
+          channel.postMessage({ ...pointer, type: 'laser' });
+        }
+        if (spotlightEnabled) publishSpotlight(pointer);
+      };
+      const setLaserEnabled = (enabled) => {
+        laserEnabled = enabled;
+        laserToggle.classList.toggle('is-active', enabled);
+        laserControls.classList.toggle('is-visible', enabled);
+        laserToggle.setAttribute('aria-pressed', String(enabled));
+        laserToggle.textContent = enabled ? 'Laser on' : 'Laser';
+        if (enabled) {
+          const pointer = {
+            ...latestPointerPosition,
+            visible: true,
+            symbol: laserSymbol.value.trim(),
+            font: activeLaserFont,
+            laser: true,
+            size: Number(spotlightSize.value),
+            ...spotlightRingOptions()
+          };
+          updatePresenterPointer(pointer);
+          channel.postMessage({ ...pointer, type: 'laser' });
+        } else {
+          channel.postMessage({ type: 'laser', visible: false });
+          if (laserPointer) laserPointer.style.opacity = '0';
+        }
+      };
+      const setSpotlightEnabled = (enabled) => {
+        spotlightEnabled = enabled;
+        spotlightToggle.classList.toggle('is-active', enabled);
+        spotlightControls.classList.toggle('is-visible', enabled);
+        spotlightToggle.setAttribute('aria-pressed', String(enabled));
+        spotlightToggle.textContent = enabled ? 'Spotlight on' : 'Spotlight';
+        publishSpotlight({
+          ...latestPointerPosition,
+          symbol: laserSymbol.value.trim(),
+          font: activeLaserFont,
+          laser: laserEnabled,
+          size: Number(spotlightSize.value),
+          ...spotlightRingOptions(),
+          visible: enabled
+        });
+        if (!enabled && !laserEnabled && laserPointer) laserPointer.style.opacity = '0';
+      };
+      const setAudienceBlanked = (blanked) => {
+        audienceBlanked = blanked;
+        audienceBlank.classList.toggle('is-active', blanked);
+        audienceBlank.setAttribute('aria-pressed', String(blanked));
+        audienceBlank.textContent = blanked ? 'Resume audience' : 'Blank audience';
+        channel.postMessage({ type: 'blackout', visible: blanked });
+      };
+      const goToSlide = () => {
+        const requestedSlide = Number(goToSlideInput.value);
+        if (!Number.isInteger(requestedSlide) || requestedSlide < 1) return;
+        channel.postMessage({
+          type: 'navigate',
+          direction: 'goto',
+          index: requestedSlide - 1
+        });
+      };
+      const toggleTimer = () => {
+        channel.postMessage({
+          type: 'timer',
+          action: timerRunning ? 'pause' : 'resume'
+        });
+      };
+      let shortcutsOpen = false;
+      const setShortcutsOpen = (open) => {
+        shortcutsOpen = open;
+        shortcutsDialog.classList.toggle('is-open', open);
+        if (open) shortcutsCard.focus({ preventScroll: true });
+      };
+      let slideSearchOpen = false;
+      const renderSlideSearchResults = () => {
+        const query = slideSearchInput.value.trim().toLocaleLowerCase();
+        const matchingSlides = presentationSlides.filter((slide) =>
+          `${slide.index + 1} ${slide.title}`.toLocaleLowerCase().includes(query)
+        );
+        slideSearchResults.replaceChildren();
+        if (matchingSlides.length === 0) {
+          slideSearchResults.textContent = 'No matching slides.';
+          return;
+        }
+        matchingSlides.forEach((slide) => {
+          const result = document.createElement('button');
+          result.className = 'slide-search-result';
+          result.type = 'button';
+          result.textContent = `${String(slide.index + 1).padStart(2, '0')} — ${slide.title}`;
+          result.addEventListener('click', () => {
+            channel.postMessage({
+              type: 'navigate',
+              direction: 'goto',
+              index: slide.index
+            });
+            setSlideSearchOpen(false);
+          });
+          slideSearchResults.append(result);
+        });
+      };
+      const setSlideSearchOpen = (open) => {
+        slideSearchOpen = open;
+        slideSearchDialog.classList.toggle('is-open', open);
+        if (!open) return;
+        slideSearchInput.value = '';
+        renderSlideSearchResults();
+        requestAnimationFrame(() => slideSearchInput.focus());
+      };
+      let bookmarksOpen = false;
+      const syncBookmarks = () => {
+        const bookmarked = bookmarkedSlideIndexes.has(activeSlideIndex);
+        bookmarkToggle.classList.toggle('is-active', bookmarked);
+        bookmarkToggle.setAttribute('aria-pressed', String(bookmarked));
+        bookmarkToggle.textContent = bookmarked ? 'Bookmarked' : 'Bookmark';
+        bookmarksButton.textContent = `Bookmarks (${bookmarkedSlideIndexes.size})`;
+        if (!bookmarksOpen) return;
+        bookmarkList.replaceChildren();
+        const bookmarks = presentationSlides.filter((slide) =>
+          bookmarkedSlideIndexes.has(slide.index)
+        );
+        if (bookmarks.length === 0) {
+          bookmarkList.textContent = 'No bookmarked slides yet.';
+          return;
+        }
+        bookmarks.forEach((slide) => {
+          const item = document.createElement('button');
+          item.className = 'bookmark-item';
+          item.type = 'button';
+          item.textContent = `${String(slide.index + 1).padStart(2, '0')} — ${slide.title}`;
+          item.addEventListener('click', () => {
+            channel.postMessage({
+              type: 'navigate',
+              direction: 'goto',
+              index: slide.index
+            });
+            setBookmarksOpen(false);
+          });
+          bookmarkList.append(item);
+        });
+      };
+      const toggleBookmark = (index) => {
+        if (bookmarkedSlideIndexes.has(index)) bookmarkedSlideIndexes.delete(index);
+        else bookmarkedSlideIndexes.add(index);
+        localStorage.setItem(bookmarksStorageKey, JSON.stringify([...bookmarkedSlideIndexes]));
+        syncBookmarks();
+      };
+      const setBookmarksOpen = (open) => {
+        bookmarksOpen = open;
+        bookmarksDialog.classList.toggle('is-open', open);
+        if (open) syncBookmarks();
+      };
+      const ensureAnnotationLayer = () => {
+        if (!annotationLayer || !annotationLayer.isConnected) {
+          annotationLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          annotationLayer.classList.add('annotation-layer');
+          annotationLayer.setAttribute('viewBox', '0 0 1 1');
+          annotationLayer.setAttribute('preserveAspectRatio', 'none');
+          currentPreview.append(annotationLayer);
+        }
+        return annotationLayer;
+      };
+      const renderAnnotations = () => {
+        const layer = ensureAnnotationLayer();
+        layer.replaceChildren();
+        const definitions = document.createElementNS(layer.namespaceURI, 'defs');
+        layer.append(definitions);
+        const appendLine = (path, points, options = {}) => {
+          const line = document.createElementNS(layer.namespaceURI, 'polyline');
+          line.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
+          line.setAttribute('fill', 'none');
+          line.setAttribute('stroke', path.color);
+          line.setAttribute('stroke-linecap', options.linecap ?? 'round');
+          line.setAttribute('stroke-linejoin', 'round');
+          line.setAttribute('stroke-width', String(options.width ?? path.width));
+          if (options.opacity !== undefined)
+            line.setAttribute('stroke-opacity', String(options.opacity));
+          if (options.dash) line.setAttribute('stroke-dasharray', options.dash);
+          layer.append(line);
+          return line;
+        };
+        annotationPaths.forEach((path, pathIndex) => {
+          const stroke = path.stroke || 'pen';
+          const width = Math.max(0.001, Number(path.width) || 0.008);
+          if (stroke === 'chalk') {
+            // A translucent solid under-stroke keeps the writing continuous.
+            // The brighter surface is punched with many deterministic,
+            // sub-stroke-size grains to reproduce chalk deposits and pores.
+            appendLine(path, path.points, { opacity: 0.2, width: width * 0.86 });
+            const maskId = `neopresent-chalk-mask-${pathIndex}`;
+            const mask = document.createElementNS(layer.namespaceURI, 'mask');
+            mask.id = maskId;
+            mask.setAttribute('maskUnits', 'userSpaceOnUse');
+            mask.setAttribute('x', '-0.05');
+            mask.setAttribute('y', '-0.05');
+            mask.setAttribute('width', '1.1');
+            mask.setAttribute('height', '1.1');
+            mask.style.maskType = 'luminance';
+            const maskStroke = document.createElementNS(layer.namespaceURI, 'polyline');
+            maskStroke.setAttribute(
+              'points',
+              path.points.map((point) => `${point.x},${point.y}`).join(' ')
+            );
+            maskStroke.setAttribute('fill', 'none');
+            maskStroke.setAttribute('stroke', '#ffffff');
+            maskStroke.setAttribute('stroke-linecap', 'round');
+            maskStroke.setAttribute('stroke-linejoin', 'round');
+            maskStroke.setAttribute('stroke-width', String(width * 1.08));
+            mask.append(maskStroke);
+            let grainIndex = 0;
+            const grainMarks = [];
+            let totalLength = 0;
+            for (let pointIndex = 1; pointIndex < path.points.length; pointIndex += 1) {
+              totalLength += Math.hypot(
+                path.points[pointIndex].x - path.points[pointIndex - 1].x,
+                path.points[pointIndex].y - path.points[pointIndex - 1].y
+              );
+            }
+            const grainCount = Math.max(1, Math.min(1400, Math.ceil(totalLength / (width * 0.34))));
+            const grainSpacing = totalLength / grainCount;
+            let nextGrainDistance = grainSpacing * 0.5;
+            let traversed = 0;
+            for (let segmentIndex = 1; segmentIndex < path.points.length && grainIndex < grainCount; segmentIndex += 1) {
+              const start = path.points[segmentIndex - 1];
+              const end = path.points[segmentIndex];
+              const dx = end.x - start.x;
+              const dy = end.y - start.y;
+              const length = Math.hypot(dx, dy);
+              if (length <= 0) continue;
+              const normalX = -dy / length;
+              const normalY = dx / length;
+              while (nextGrainDistance <= traversed + length && grainIndex < grainCount) {
+                const progress = (nextGrainDistance - traversed) / length;
+                const phase = (pathIndex + 1) * 2.173 + grainIndex * 1.619;
+                const across = Math.sin(phase * 1.31) * width * 0.4;
+                const along = Math.cos(phase * 2.17) * width * 0.08;
+                const cx = start.x + dx * progress + normalX * across + (dx / length) * along;
+                const cy = start.y + dy * progress + normalY * across + (dy / length) * along;
+                const radius = width * (0.08 + 0.1 * (0.5 + 0.5 * Math.sin(phase * 0.83)));
+                grainMarks.push(`M ${cx - radius} ${cy} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`);
+                grainIndex += 1;
+                nextGrainDistance += grainSpacing;
+              }
+              traversed += length;
+            }
+            const grainTexture = document.createElementNS(layer.namespaceURI, 'path');
+            grainTexture.setAttribute('d', grainMarks.join(' '));
+            grainTexture.setAttribute('fill', '#050505');
+            mask.append(grainTexture);
+            definitions.append(mask);
+            const chalkSurface = appendLine(path, path.points, { opacity: 0.94, width: width * 1.08 });
+            chalkSurface.setAttribute('mask', `url(#${maskId})`);
+          } else if (stroke === 'marker') {
+            appendLine(path, path.points, { opacity: 0.38, width: width * 2.35 });
+          } else if (stroke === 'dashed') {
+            appendLine(path, path.points, {
+              dash: `${width * 4} ${width * 2}`,
+              linecap: 'butt'
+            });
+          } else if (stroke === 'dotted') {
+            appendLine(path, path.points, {
+              dash: `0 ${width * 2.1}`,
+              linecap: 'round'
+            });
+          } else appendLine(path, path.points);
+        });
+      };
+      const eraseAnnotationPaths = (paths, point, radius) =>
+        paths.filter(
+          (path) =>
+            !path.points.some(
+              (candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) <= radius
+            )
+        );
+      const eraseAnnotationAt = (point, broadcast = true) => {
+        const radius = Math.max(0.018, Number(annotationSize.value) / 250);
+        const nextPaths = eraseAnnotationPaths(annotationPaths, point, radius);
+        if (nextPaths.length === annotationPaths.length) return;
+        annotationPaths = nextPaths;
+        annotationsBySlide.set(activeSlideIndex, annotationPaths);
+        renderAnnotations();
+        if (broadcast)
+          channel.postMessage({
+            type: 'annotation-erase',
+            point,
+            radius,
+            slideIndex: activeSlideIndex
+          });
+      };
+      const clearAnnotations = (broadcast = true) => {
+        annotationPaths = [];
+        annotationsBySlide.set(activeSlideIndex, annotationPaths);
+        annotationRedoBySlide.set(activeSlideIndex, []);
+        activeAnnotationPath = null;
+        if (annotationLayer?.isConnected) annotationLayer.replaceChildren();
+        if (broadcast)
+          channel.postMessage({
+            type: 'annotation-clear',
+            slideIndex: activeSlideIndex
+          });
+      };
+      const undoAnnotation = () => {
+        if (annotationPaths.length === 0) return;
+        const path = annotationPaths.pop();
+        const redoPaths = annotationRedoBySlide.get(activeSlideIndex) || [];
+        redoPaths.push(path);
+        annotationRedoBySlide.set(activeSlideIndex, redoPaths);
+        renderAnnotations();
+        channel.postMessage({
+          type: 'annotation-undo',
+          slideIndex: activeSlideIndex
+        });
+      };
+      const redoAnnotation = () => {
+        const redoPaths = annotationRedoBySlide.get(activeSlideIndex) || [];
+        const path = redoPaths.pop();
+        if (!path) return;
+        annotationPaths.push(path);
+        renderAnnotations();
+        channel.postMessage({
+          type: 'annotation-redo',
+          path,
+          slideIndex: activeSlideIndex
+        });
+      };
+      const saveAnnotations = () => {
+        const strokes = [...annotationsBySlide.entries()]
+          .sort(([left], [right]) => left - right)
+          .map(([slideIndex, paths]) => ({
+            slideIndex,
+            paths: paths.map((path) => ({
+              color: String(path.color || '#ff3b30'),
+              points: (path.points || [])
+                .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y))
+                .map((point) => ({
+                  x: Math.max(0, Math.min(1, Number(point.x))),
+                  y: Math.max(0, Math.min(1, Number(point.y)))
+                })),
+              stroke: ['chalk', 'pen', 'marker', 'dashed', 'dotted'].includes(path.stroke)
+                ? path.stroke
+                : 'chalk',
+              width: Number.isFinite(path.width) ? path.width : 0.008
+            }))
+          }))
+          .filter((slide) => slide.paths.length > 0);
+        const payload = {
+          format: 'neopresent-annotations',
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          slideCount: totalSlides,
+          slides: strokes
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], {
+          type: 'application/json'
+        });
+        const link = document.createElement('a');
+        const pathName = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || 'presentation');
+        const baseName = pathName.replace(/\.(?:html?|md)$/i, '') || 'presentation';
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = `${baseName}-annotations.json`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      const pointerPoint = (event) => {
+        const bounds = currentPreview.getBoundingClientRect();
+        return {
+          x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+          y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
+        };
+      };
+      const updateAnnotationCursor = ({ x, y, visible, symbol = annotationSymbol.value }) => {
+        if (!annotationCursor || !annotationCursor.isConnected) {
+          annotationCursor = document.createElement('div');
+          annotationCursor.className = 'presenter-pointer has-symbol';
+          annotationCursor.setAttribute('aria-hidden', 'true');
+          Object.assign(annotationCursor.style, {
+            color: annotationColor.value,
+            fontFamily: activeLaserFont,
+            fontSize: '1.8rem',
+            textShadow: `0 0 8px ${annotationColor.value}`,
+            // User-calibrated visible ✍ pencil-tip anchor: x=6%, y=76%.
+            transform: 'translate(-6%, -76%)',
+            transformOrigin: 'top left'
+          });
+          currentPreview.append(annotationCursor);
+        }
+        annotationCursor.textContent = String(symbol || '✍').replaceAll('\ufe0f', '') + '\ufe0e';
+        annotationCursor.style.color = annotationColor.value;
+        annotationCursor.style.fontFamily = activeLaserFont;
+        annotationCursor.style.setProperty('font-variant-emoji', 'text');
+        annotationCursor.style.textShadow = `0 0 8px ${annotationColor.value}`;
+        annotationCursor.style.left = `${x * 100}%`;
+        annotationCursor.style.top = `${y * 100}%`;
+        annotationCursor.style.opacity = visible ? '1' : '0';
+      };
+      const publishAnnotationCursor = (point, visible) => {
+        latestAnnotationPosition = point;
+        const message = {
+          type: 'annotation-cursor',
+          ...point,
+          color: annotationColor.value,
+          font: activeLaserFont,
+          symbol: annotationEraserEnabled ? '⌫' : annotationSymbol.value.trim() || '✍',
+          visible
+        };
+        updateAnnotationCursor(message);
+        channel.postMessage(message);
+      };
+      const setAnnotationEnabled = (enabled) => {
+        annotationEnabled = enabled;
+        annotationToggle.classList.toggle('is-active', enabled);
+        annotationControls.classList.toggle('is-visible', enabled || annotationEraserEnabled);
+        annotationToggle.setAttribute('aria-pressed', String(enabled));
+        annotationToggle.textContent = enabled ? 'Annotating' : 'Annotate';
+        if (enabled) setLaserEnabled(false);
+        publishAnnotationCursor(latestAnnotationPosition, enabled || annotationEraserEnabled);
+      };
+      const setAnnotationEraserEnabled = (enabled) => {
+        annotationEraserEnabled = enabled;
+        activeAnnotationPath = null;
+        if (enabled) setLaserEnabled(false);
+        annotationEraser.classList.toggle('is-active', enabled);
+        annotationEraser.setAttribute('aria-pressed', String(enabled));
+        annotationEraser.textContent = enabled ? '⌫ Erasing' : '⌫ Eraser';
+        annotationControls.classList.toggle('is-visible', enabled || annotationEnabled);
+        publishAnnotationCursor(latestAnnotationPosition, enabled || annotationEnabled);
+      };
+      audienceBlank.addEventListener('click', () => setAudienceBlanked(!audienceBlanked));
+      goToSlideButton.addEventListener('click', goToSlide);
+      timerToggle.addEventListener('click', toggleTimer);
+      timerReset.addEventListener('click', () =>
+        channel.postMessage({ type: 'timer', action: 'reset' })
+      );
+      autoplayToggle.addEventListener('click', () =>
+        channel.postMessage({ type: 'autoplay', action: 'toggle' })
+      );
+      const publishLiveStyle = () => {
+        channel.postMessage({
+          type: 'live-style',
+          theme: liveTheme.value,
+          aspect: liveAspect.value
+        });
+      };
+      liveTheme.addEventListener('change', publishLiveStyle);
+      liveAspect.addEventListener('change', publishLiveStyle);
+      layoutReset.addEventListener('click', resetResizablePanels);
+      shortcutsButton.addEventListener('click', () => setShortcutsOpen(true));
+      slideSearchButton.addEventListener('click', () => setSlideSearchOpen(true));
+      slideSearchClose.addEventListener('click', () => setSlideSearchOpen(false));
+      slideSearchInput.addEventListener('input', renderSlideSearchResults);
+      slideSearchDialog.addEventListener('keydown', (event) => {
+        const results = [...slideSearchResults.querySelectorAll('button')];
+        const focusedIndex = results.indexOf(document.activeElement);
+        if (event.key === 'Escape' && document.activeElement === slideSearchInput) {
+          event.preventDefault();
+          slideSearchInput.blur();
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          (results[focusedIndex + 1] || results[0])?.focus();
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (focusedIndex <= 0) slideSearchInput.focus();
+          else results[focusedIndex - 1].focus();
+        } else if (event.key === 'Enter' && document.activeElement === slideSearchInput) {
+          event.preventDefault();
+          results[0]?.click();
+        }
+      });
+      slideSearchDialog.addEventListener('click', (event) => {
+        if (event.target === slideSearchDialog) setSlideSearchOpen(false);
+      });
+      bookmarkToggle.addEventListener('click', () => toggleBookmark(activeSlideIndex));
+      bookmarksButton.addEventListener('click', () => setBookmarksOpen(true));
+      bookmarksClose.addEventListener('click', () => setBookmarksOpen(false));
+      bookmarksDialog.addEventListener('click', (event) => {
+        if (event.target === bookmarksDialog) setBookmarksOpen(false);
+      });
+      shortcutsDialog.addEventListener('click', (event) => {
+        if (event.target === shortcutsDialog) setShortcutsOpen(false);
+      });
+      goToSlideInput.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        goToSlide();
+      });
+      previousPreview.addEventListener('click', (event) => {
+        if (
+          activeSlideIndex === 0 ||
+          (event.target instanceof Element && event.target.closest('a'))
+        )
+          return;
+        channel.postMessage({
+          type: 'navigate',
+          direction: 'goto',
+          index: activeSlideIndex - 1
+        });
+      });
+      nextPreview.addEventListener('click', (event) => {
+        if (
+          activeSlideIndex >= totalSlides - 1 ||
+          (event.target instanceof Element && event.target.closest('a'))
+        )
+          return;
+        channel.postMessage({
+          type: 'navigate',
+          direction: 'goto',
+          index: activeSlideIndex + 1
+        });
+      });
+      laserToggle.addEventListener('click', () => setLaserEnabled(!laserEnabled));
+      spotlightToggle.addEventListener('click', () => setSpotlightEnabled(!spotlightEnabled));
+      const publishSpotlightStyle = () => {
+        publishRingStyle();
+        if (!spotlightEnabled) return;
+        publishSpotlight({
+          ...latestPointerPosition,
+          size: Number(spotlightSize.value),
+          ...spotlightRingOptions(),
+          visible: true
+        });
+      };
+      spotlightRingToggle.addEventListener('click', () => {
+        spotlightRingEnabled = !spotlightRingEnabled;
+        spotlightRingToggle.classList.toggle('is-active', spotlightRingEnabled);
+        spotlightRingToggle.setAttribute('aria-pressed', String(spotlightRingEnabled));
+        spotlightRingToggle.textContent = spotlightRingEnabled ? 'Spot ring' : 'Ring off';
+        publishSpotlightStyle();
+      });
+      spotlightRingColor.addEventListener('input', publishSpotlightStyle);
+      spotlightRingColor.addEventListener('change', publishSpotlightStyle);
+      spotlightRingSize.addEventListener('input', publishSpotlightStyle);
+      spotlightRingSize.addEventListener('change', publishSpotlightStyle);
+      spotlightSize.addEventListener('input', () => {
+        if (!spotlightEnabled) return;
+        publishSpotlight({
+          ...latestPointerPosition,
+          symbol: laserSymbol.value.trim(),
+          font: activeLaserFont,
+          laser: laserEnabled,
+          size: Number(spotlightSize.value),
+          ...spotlightRingOptions(),
+          visible: true
+        });
+      });
+      annotationToggle.addEventListener('click', () => setAnnotationEnabled(!annotationEnabled));
+      annotationEraser.addEventListener('click', () =>
+        setAnnotationEraserEnabled(!annotationEraserEnabled)
+      );
+      annotationUndo.addEventListener('click', undoAnnotation);
+      annotationRedo.addEventListener('click', redoAnnotation);
+      annotationSave.addEventListener('click', saveAnnotations);
+      annotationClear.addEventListener('click', () => clearAnnotations());
+      annotationPreset.addEventListener('change', () => {
+        annotationSymbol.value = annotationPreset.value;
+        if (annotationEnabled) publishAnnotationCursor(latestAnnotationPosition, true);
+      });
+      annotationSymbol.addEventListener('input', () => {
+        if (annotationEnabled) publishAnnotationCursor(latestAnnotationPosition, true);
+      });
+      annotationColor.addEventListener('input', () => {
+        if (annotationEnabled) publishAnnotationCursor(latestAnnotationPosition, true);
+      });
+      laserPreset.addEventListener('change', () => {
+        laserSymbol.value = laserPreset.value;
+      });
+      laserFontFile.addEventListener('change', async () => {
+        const file = laserFontFile.files?.[0];
+        if (!file) return;
+        const fontName = 'NeoPresentPointerCustom';
+        const fontData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.addEventListener('load', () => resolve(reader.result));
+          reader.addEventListener('error', () => reject(reader.error));
+          reader.readAsDataURL(file);
+        });
+        try {
+          const font = new FontFace(fontName, `url(${fontData})`);
+          await font.load();
+          document.fonts.add(font);
+          activeLaserFont = fontName;
+          activeLaserFontData = fontData;
+          channel.postMessage({ type: 'laser-font', font: fontName, fontData });
+          if (annotationEnabled || annotationEraserEnabled)
+            publishAnnotationCursor(latestAnnotationPosition, true);
+        } catch (error) {
+          console.error('NeoPresent could not load the selected pointer font.', error);
+        }
+      });
+      currentPreview.addEventListener('pointerdown', (event) => {
+        if (!annotationEnabled && !annotationEraserEnabled) return;
+        event.preventDefault();
+        const point = pointerPoint(event);
+        publishAnnotationCursor(point, true);
+        currentPreview.setPointerCapture(event.pointerId);
+        if (annotationEraserEnabled) {
+          eraseAnnotationAt(point);
+          return;
+        }
+        activeAnnotationPath = {
+          color: annotationColor.value,
+          points: [point],
+          stroke: annotationStroke.value,
+          width: Number(annotationSize.value) / 1000
+        };
+        annotationPaths.push(activeAnnotationPath);
+        annotationsBySlide.set(activeSlideIndex, annotationPaths);
+        annotationRedoBySlide.set(activeSlideIndex, []);
+        renderAnnotations();
+        channel.postMessage({
+          type: 'annotation-start',
+          color: activeAnnotationPath.color,
+          point: activeAnnotationPath.points[0],
+          slideIndex: activeSlideIndex,
+          stroke: activeAnnotationPath.stroke,
+          width: activeAnnotationPath.width
+        });
+      });
+      currentPreview.addEventListener('pointermove', (event) => {
+        if (annotationEnabled || annotationEraserEnabled)
+          publishAnnotationCursor(pointerPoint(event), true);
+        if (annotationEraserEnabled && event.buttons === 1) {
+          eraseAnnotationAt(pointerPoint(event));
+          return;
+        }
+        if (annotationEnabled && activeAnnotationPath) {
+          const point = pointerPoint(event);
+          activeAnnotationPath.points.push(point);
+          renderAnnotations();
+          channel.postMessage({ type: 'annotation-point', point });
+          return;
+        }
+        const mark = event.target.closest?.('[data-neopresent-tooltip]');
+        const text = mark?.dataset.neopresentTooltip || '';
+        setActiveChartMark(mark);
+        const point = pointerPoint(event);
+        setMathAwareText(chartTooltip, text);
+        chartTooltip.style.display = text ? 'block' : 'none';
+        if (text) {
+          chartTooltip.style.left = `${Math.min(window.innerWidth - chartTooltip.offsetWidth - 8, event.clientX + 14)}px`;
+          chartTooltip.style.top = `${Math.min(window.innerHeight - chartTooltip.offsetHeight - 8, event.clientY + 14)}px`;
+        }
+        publishChartTooltip({
+          type: 'chart-tooltip',
+          slideIndex: activeSlideIndex,
+          text,
+          visible: Boolean(text),
+          x: point.x,
+          y: point.y
+        });
+        sendLaser(true, event);
+      });
+      currentPreview.addEventListener('pointerup', () => {
+        activeAnnotationPath = null;
+      });
+      currentPreview.addEventListener('pointerleave', () => {
+        chartTooltip.style.display = 'none';
+        setActiveChartMark(null);
+        publishChartTooltip({ type: 'chart-tooltip', visible: false });
+        sendLaser(false);
+        if (annotationEnabled || annotationEraserEnabled)
+          publishAnnotationCursor(latestAnnotationPosition, false);
+      });
+
+      function renderSlide(target, slide) {
+        target.replaceChildren();
+        if (!slide) {
+          target.textContent = 'End of presentation';
+          return;
+        }
+        applyThemeToTarget(target, slide.theme);
+        if (slide.aspect) {
+          const [aspectWidth, aspectHeight] = String(slide.aspect).split(':').map(Number);
+          target.style.aspectRatio =
+            aspectWidth > 0 && aspectHeight > 0 ? `${aspectWidth} / ${aspectHeight}` : '16 / 9';
+        } else {
+          target.style.aspectRatio = '16 / 9';
+        }
+        if (slide.vdom) {
+          renderViewerSlide(target, slide.vdom);
+          return;
+        }
+        const stage = document.createElement('div');
+        stage.className = 'preview-stage';
+        target.append(stage);
+        if (slide.background)
+          target.style.background = resolvePreviewBackground(
+            slide.background,
+            slide.backgroundOverlay,
+            slide.backgroundPosition,
+            slide.backgroundSize
+          );
+        else target.style.background = 'var(--np-background)';
+        const revealState = {
+          remaining: slide.reveal ? slide.revealIndex : Number.POSITIVE_INFINITY
+        };
+        const content = document.createElement('div');
+        content.className = 'preview-content';
+        content.style.alignItems =
+          { left: 'flex-start', center: 'center', right: 'flex-end' }[slide.align] ?? 'center';
+        content.style.justifyContent =
+          { top: 'flex-start', center: 'center', bottom: 'flex-end' }[slide.valign] ?? 'center';
+        content.style.textAlign = slide.align ?? 'center';
+        content.style.fontFamily = slide.bodyFont || slide.font || 'Inter, system-ui, sans-serif';
+        if (slide.section) {
+          const section = document.createElement('div');
+          section.className = 'section-preview';
+          const label = document.createElement('span');
+          label.className = 'section-preview-label';
+          label.textContent = 'SECTION';
+          const title = document.createElement('h1');
+          appendInlineContent(title, slide.section);
+          section.append(label, title);
+          content.append(section);
+        } else {
+          slide.children.forEach((node) =>
+            content.append(createNode(node, revealState, slide.theme))
+          );
+        }
+        if (slide.headingFont || slide.font)
+          content
+            .querySelectorAll('h1, h2, h3, h4, h5, h6')
+            .forEach((element) => (element.style.fontFamily = slide.headingFont || slide.font));
+        const primaryHeading = content.querySelector('h1, h2, h3, h4, h5, h6');
+        if (primaryHeading) {
+          const headingAlign = slide.headingAlign || slide.align || 'center';
+          const headingOffset = parseInlineOffset(slide.headingOffset) || {
+            x: '0',
+            y: '0'
+          };
+          primaryHeading.style.alignSelf =
+            { left: 'flex-start', center: 'center', right: 'flex-end' }[headingAlign] || 'center';
+          primaryHeading.style.textAlign = headingAlign;
+          primaryHeading.style.width =
+            slide.headingPosition && slide.headingPosition !== 'flow'
+              ? 'calc(100% - 2.5rem)'
+              : '100%';
+          if (slide.headingPosition && slide.headingPosition !== 'flow') {
+            primaryHeading.style.left = '50%';
+            primaryHeading.style.position = 'absolute';
+            primaryHeading.style.zIndex = '2';
+            if (slide.headingPosition === 'top') primaryHeading.style.top = '1.25rem';
+            if (slide.headingPosition === 'bottom') primaryHeading.style.bottom = '1.25rem';
+            if (slide.headingPosition === 'center') primaryHeading.style.top = '50%';
+            primaryHeading.style.transform =
+              slide.headingPosition === 'center'
+                ? `translate(calc(-50% + ${headingOffset.x}), calc(-50% + ${headingOffset.y}))`
+                : `translate(calc(-50% + ${headingOffset.x}), ${headingOffset.y})`;
+          } else if (headingOffset.x !== '0' || headingOffset.y !== '0') {
+            primaryHeading.style.position = 'relative';
+            primaryHeading.style.left = headingOffset.x;
+            primaryHeading.style.top = headingOffset.y;
+          }
+        }
+        if (slide.listFont || slide.bodyFont || slide.font)
+          content
+            .querySelectorAll('ul, ol')
+            .forEach(
+              (element) =>
+                (element.style.fontFamily = slide.listFont || slide.bodyFont || slide.font)
+            );
+        if (slide.quoteFont || slide.bodyFont || slide.font)
+          content
+            .querySelectorAll('blockquote')
+            .forEach(
+              (element) =>
+                (element.style.fontFamily = slide.quoteFont || slide.bodyFont || slide.font)
+            );
+        stage.append(content);
+        if (slide.logo?.src) {
+          const logo = document.createElement('img');
+          const logoOffset = parseInlineOffset(slide.logo.offset) || {
+            x: '0',
+            y: '0'
+          };
+          logo.src = slide.logo.src;
+          logo.alt = '';
+          logo.style.cssText =
+            'max-height: 2rem; max-width: 6rem; object-fit: contain; opacity: .82; position: absolute; right: 1.2rem; top: 1rem;';
+          logo.style.transform = `translate(${logoOffset.x}, ${logoOffset.y})`;
+          stage.append(logo);
+        }
+        if (slide.pageNumber) {
+          const pageNumber = document.createElement('span');
+          const requestedPosition = String(
+            slide.pageNumber.position || 'bottom-right'
+          ).toLowerCase();
+          const position = [
+            'top-left',
+            'top-center',
+            'top-right',
+            'bottom-left',
+            'bottom-center',
+            'bottom-right'
+          ].includes(requestedPosition)
+            ? requestedPosition
+            : 'bottom-right';
+          const [vertical = 'bottom', horizontal = 'right'] = position.split('-');
+          const offset = parseInlineOffset(slide.pageNumber.offset) || {
+            x: '0',
+            y: '0'
+          };
+          pageNumber.textContent = slide.pageNumber.showTotal
+            ? `${slide.pageNumber.current}/${slide.pageNumber.total}`
+            : String(slide.pageNumber.current);
+          pageNumber.style.cssText =
+            'color: var(--np-muted); font-size: .72rem; font-variant-numeric: tabular-nums; opacity: .82; position: absolute; z-index: 3;';
+          if (vertical === 'top') pageNumber.style.top = '1rem';
+          if (vertical === 'bottom') pageNumber.style.bottom = '1.2rem';
+          if (horizontal === 'left') pageNumber.style.left = '1.2rem';
+          if (horizontal === 'right') pageNumber.style.right = '1.2rem';
+          if (horizontal === 'center') pageNumber.style.left = '50%';
+          pageNumber.style.transform =
+            horizontal === 'center'
+              ? `translate(calc(-50% + ${offset.x}), ${offset.y})`
+              : `translate(${offset.x}, ${offset.y})`;
+          stage.append(pageNumber);
+        }
+        if (
+          !slide.hideFooter &&
+          (slide.footer?.left || slide.footer?.center || slide.footer?.right)
+        ) {
+          const footer = document.createElement('footer');
+          footer.style.cssText =
+            'bottom: 1.2rem; color: var(--np-muted); font-size: .72rem; left: 1.2rem; opacity: .82; position: absolute; right: 1.2rem;';
+          footer.style.fontFamily = slide.footer.font || 'inherit';
+          const addFooterSlot = (text, position, alignment, fontFamily) => {
+            if (!text) return;
+            const slot = document.createElement('span');
+            slot.style.position = 'absolute';
+            slot.style.textAlign = alignment;
+            slot.style.whiteSpace = 'nowrap';
+            slot.style.fontFamily = fontFamily || slide.footer.font || 'inherit';
+            if (position === 'left') slot.style.left = '0';
+            if (position === 'right') slot.style.right = '0';
+            if (position === 'center') {
+              slot.style.left = '50%';
+              slot.style.transform = 'translateX(-50%)';
+            }
+            appendInlineContent(slot, text);
+            footer.append(slot);
+          };
+          addFooterSlot(slide.footer.left, 'left', 'left', slide.footer.leftFont);
+          addFooterSlot(slide.footer.center, 'center', 'center', slide.footer.centerFont);
+          addFooterSlot(slide.footer.right, 'right', 'right', slide.footer.rightFont);
+          stage.append(footer);
+        }
+        if (slide.progress) {
+          const track = document.createElement('div');
+          track.style.cssText =
+            'background: var(--np-border); bottom: 0; height: 4px; left: 0; position: absolute; width: 100%;';
+          const fill = document.createElement('div');
+          fill.style.cssText = `background: var(--np-accent); height: 100%; width: ${Math.max(0, Math.min(100, (slide.progress.current / Math.max(1, slide.progress.total)) * 100))}%;`;
+          track.append(fill);
+          stage.append(track);
+        }
+        if (Array.isArray(slide.footnotes) && slide.footnotes.length > 0) {
+          const footnotes = document.createElement('aside');
+          footnotes.style.cssText = `${!slide.hideFooter && (slide.footer?.left || slide.footer?.center || slide.footer?.right) ? 'bottom: 2.7rem' : 'bottom: 1.2rem'}; color: var(--np-muted); font-size: .72rem; left: 1.2rem; line-height: 1.35; max-width: 70%; position: absolute; text-align: left;`;
+          slide.footnotes.forEach(({ id, text }) => {
+            const entry = document.createElement('div');
+            const marker = document.createElement('sup');
+            marker.textContent = `[${id}] `;
+            marker.style.cssText = 'color: var(--np-accent); font-weight: 700;';
+            entry.append(marker);
+            appendInlineContent(entry, text);
+            footnotes.append(entry);
+          });
+          stage.append(footnotes);
+        }
+        requestAnimationFrame(() => fitPreviewContent(target, content));
+      }
+
+      function renderViewerSlide(target, vdom) {
+        const [aspectWidth, aspectHeight] = getComputedStyle(target)
+          .aspectRatio.split('/')
+          .map(Number);
+        const previewAspect =
+          aspectWidth > 0 && aspectHeight > 0 ? aspectWidth / aspectHeight : 16 / 9;
+        const designWidth = 1600;
+        const designHeight = designWidth / previewAspect;
+        const stage = document.createElement('div');
+        stage.className = 'preview-stage';
+        const renderedSlide = createVdomElement(vdom, designWidth, designHeight);
+        renderedSlide.classList.add('viewer-slide-preview');
+        renderedSlide.style.height = `${designHeight}px`;
+        renderedSlide.style.left = '0';
+        renderedSlide.style.position = 'relative';
+        renderedSlide.style.top = '0';
+        renderedSlide.style.translate = 'none';
+        renderedSlide.style.width = `${designWidth}px`;
+        stage.append(renderedSlide);
+        target.append(stage);
+        if (vdom.style?.background) target.style.background = vdom.style.background;
+        requestAnimationFrame(() => fitPreviewContent(target, renderedSlide));
+        target
+          .querySelectorAll('[data-katex-source]')
+          .forEach((math) =>
+            renderMathPreview(
+              math,
+              math.dataset.katexSource || '',
+              math.dataset.katexDisplay === 'block'
+            )
+          );
+        target
+          .querySelectorAll('[data-mermaid-source]')
+          .forEach((diagram) => renderMermaidPreview(diagram, diagram.dataset.mermaidSource || ''));
+      }
+
+      function createVdomElement(vdom, viewportWidth, viewportHeight) {
+        if (vdom == null || vdom === false) return document.createTextNode('');
+        if (typeof vdom !== 'object') return document.createTextNode(String(vdom));
+        if (vdom.vtype === 'text') return document.createTextNode(String(vdom.text ?? ''));
+        if (Array.isArray(vdom)) {
+          const fragment = document.createDocumentFragment();
+          vdom.forEach((child) =>
+            fragment.append(createVdomElement(child, viewportWidth, viewportHeight))
+          );
+          return fragment;
+        }
+        const element = document.createElement(vdom.tag || 'div');
+        Object.entries(vdom.style || {}).forEach(([property, value]) => {
+          if (value == null) return;
+          element.style[property] = resolvePreviewViewportUnits(
+            String(value),
+            viewportWidth,
+            viewportHeight
+          );
+        });
+        Object.entries(vdom.data || {}).forEach(([key, value]) => {
+          if (value != null) element.dataset[key] = String(value);
+        });
+        const reserved = new Set(['tag', 'style', 'data', 'cn', 'html', 'text']);
+        Object.entries(vdom).forEach(([key, value]) => {
+          if (reserved.has(key) || value == null || typeof value === 'object') return;
+          if (key in element) {
+            try {
+              element[key] = value;
+              return;
+            } catch {}
+          }
+          element.setAttribute(key, String(value));
+        });
+        if (vdom.html != null) element.innerHTML = String(vdom.html);
+        else if (vdom.text != null) element.textContent = String(vdom.text);
+        const children = Array.isArray(vdom.cn) ? vdom.cn : vdom.cn == null ? [] : [vdom.cn];
+        children.forEach((child) =>
+          element.append(createVdomElement(child, viewportWidth, viewportHeight))
+        );
+        return element;
+      }
+
+      function resolvePreviewViewportUnits(value, viewportWidth, viewportHeight) {
+        return value
+          .replace(
+            /(-?\d*\.?\d+)cqw\b/g,
+            (_, amount) => `${(Number(amount) * viewportWidth) / 100}px`
+          )
+          .replace(
+            /(-?\d*\.?\d+)cqh\b/g,
+            (_, amount) => `${(Number(amount) * viewportHeight) / 100}px`
+          )
+          .replace(
+            /(-?\d*\.?\d+)vw\b/g,
+            (_, amount) => `${(Number(amount) * viewportWidth) / 100}px`
+          )
+          .replace(
+            /(-?\d*\.?\d+)vh\b/g,
+            (_, amount) => `${(Number(amount) * viewportHeight) / 100}px`
+          );
+      }
+
+      function applyThemeToTarget(target, theme) {
+        if (!theme) return;
+        const properties = {
+          accent: '--np-accent',
+          background: '--np-background',
+          border: '--np-border',
+          codeString: '--np-code-string',
+          foreground: '--np-foreground',
+          muted: '--np-muted',
+          panel: '--np-panel',
+          surface: '--np-surface'
+        };
+        Object.entries(properties).forEach(([key, property]) => {
+          if (typeof theme[key] === 'string') target.style.setProperty(property, theme[key]);
+        });
+      }
+
+      function resolvePreviewBackground(value, overlay = '', position = 'center', size = 'cover') {
+        let resolved = value;
+        if (/\.(?:avif|gif|jpe?g|png|svg|webp)(?:$|[?#])/i.test(value.trim())) {
+          resolved = `${position} / ${size} no-repeat url("${value.replace(/"/g, '%22')}")`;
+        }
+        return overlay ? `linear-gradient(${overlay}, ${overlay}), ${resolved}` : resolved;
+      }
+
+      function fitPreviewContent(target, content) {
+        content.style.transform = 'none';
+        content.style.height = '100%';
+        content.style.width = '100%';
+        const stage = content.closest('.preview-stage');
+        if (!stage) return;
+        const [aspectWidth, aspectHeight] = getComputedStyle(target)
+          .aspectRatio.split('/')
+          .map(Number);
+        const previewAspect =
+          aspectWidth > 0 && aspectHeight > 0 ? aspectWidth / aspectHeight : 16 / 9;
+        const designWidth = 1600;
+        const designHeight = designWidth / previewAspect;
+        const scale = Math.min(
+          target.clientWidth / designWidth,
+          target.clientHeight / designHeight
+        );
+        stage.style.width = `${designWidth}px`;
+        stage.style.height = `${designHeight}px`;
+        stage.style.transform = `translate(-50%, -50%) scale(${Number.isFinite(scale) ? scale : 1})`;
+      }
+
+      function createNode(node, revealState = { remaining: Number.POSITIVE_INFINITY }, theme = {}) {
+        if (node.type === 'paragraph' && node.poll) {
+          const lines = node.text
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+          const poll = document.createElement('section');
+          poll.className = 'poll-preview';
+          poll.dataset.pollId = node.pollId;
+          const title = document.createElement('h3');
+          title.textContent = lines[0] || 'Audience poll';
+          poll.append(title);
+          const counts =
+            pollCounts.get(node.pollId) ||
+            Array.from({ length: Math.max(0, lines.length - 1) }, () => 0);
+          pollCounts.set(node.pollId, counts);
+          lines.slice(1).forEach((line, index) => {
+            const option = document.createElement('div');
+            option.className = 'poll-option';
+            const label = document.createElement('span');
+            label.textContent = line.replace(/^[-*]\s*/, '');
+            const count = document.createElement('strong');
+            count.dataset.pollCount = String(index);
+            count.textContent = String(counts[index] || 0);
+            option.append(label, count);
+            poll.append(option);
+          });
+          return poll;
+        }
+        if (node.type === 'paragraph' && node.math) {
+          const equation = document.createElement('div');
+          equation.className = 'math-preview';
+          renderMathPreview(equation, node.text, true);
+          return equation;
+        }
+        if (node.type === 'paragraph' && node.embedSrc) {
+          const embed = document.createElement('div');
+          embed.className = 'embed-preview';
+          const title = document.createElement('strong');
+          title.textContent = node.embedTitle || 'Embedded content';
+          const link = document.createElement('a');
+          link.href = node.embedSrc;
+          link.rel = 'noopener noreferrer';
+          link.target = '_blank';
+          link.textContent = 'Open embed';
+          link.style.marginLeft = '.5rem';
+          embed.append(title, link);
+          return embed;
+        }
+        if (node.type === 'paragraph' && node.mermaid) {
+          const diagram = document.createElement('div');
+          diagram.className = 'mermaid-preview';
+          renderMermaidPreview(diagram, node.text);
+          return diagram;
+        }
+        if (node.type === 'paragraph' && node.feynman) {
+          const diagram = document.createElement('div');
+          diagram.className = 'feynman-preview';
+          diagram.innerHTML = createFeynmanMarkup(node.text, presenterTheme);
+          diagram
+            .querySelectorAll('[data-katex-source]')
+            .forEach((host) => renderMathPreview(host, host.dataset.katexSource || '', false));
+          return diagram;
+        }
+        if (node.type === 'paragraph' && node.fragment) {
+          const visible = revealState.remaining > 0;
+          revealState.remaining = Math.max(0, revealState.remaining - 1);
+          const fragment = document.createElement('p');
+          fragment.style.cssText = `opacity: ${visible ? 1 : 0}; transition: opacity 220ms ease-out; visibility: ${visible ? 'visible' : 'hidden'};`;
+          appendInlineContent(fragment, node.text);
+          return fragment;
+        }
+        if (node.type === 'paragraph' && node.divider) {
+          const divider = document.createElement('hr');
+          divider.className = 'slide-divider';
+          return divider;
+        }
+        if (node.type === 'paragraph' && node.references) {
+          const references = document.createElement('aside');
+          references.className = 'references-preview';
+          const label = document.createElement('strong');
+          label.textContent = 'REFERENCES';
+          references.append(label);
+          node.text
+            .split('\n')
+            .filter(Boolean)
+            .forEach((line) => {
+              const entry = document.createElement('div');
+              appendInlineContent(entry, line);
+              references.append(entry);
+            });
+          return references;
+        }
+        if (node.type === 'paragraph' && node.stat) {
+          const lines = node.text.split('\n').filter(Boolean);
+          const stat = document.createElement('aside');
+          stat.className = 'stat-preview';
+          const value = document.createElement('div');
+          value.className = 'stat-value';
+          value.textContent = lines.shift() || '';
+          const label = document.createElement('div');
+          label.className = 'stat-label';
+          appendInlineContent(label, lines.join(' '));
+          stat.append(value, label);
+          return stat;
+        }
+        if (node.type === 'paragraph' && node.timeline) {
+          const timeline = document.createElement('ol');
+          timeline.style.cssText =
+            'border-left: 2px solid var(--np-accent); box-sizing: border-box; list-style: none; margin: 0; padding-left: 1rem; text-align: left; width: 100%;';
+          node.text
+            .split('\n')
+            .filter(Boolean)
+            .forEach((line) => {
+              const [when, ...rest] = line.split(/\s*(?:\||—|--)\s*/);
+              const entry = document.createElement('li');
+              entry.style.cssText = 'margin-bottom: .5rem; position: relative;';
+              const dot = document.createElement('span');
+              dot.style.cssText =
+                'background: var(--np-accent); border-radius: 50%; height: 7px; left: -1.3rem; position: absolute; top: .35rem; width: 7px;';
+              const label = document.createElement('strong');
+              label.style.cssText = 'color: var(--np-accent); display: block;';
+              label.textContent = when.trim();
+              const detail = document.createElement('span');
+              appendInlineContent(detail, rest.join(' — ').trim());
+              entry.append(dot, label, detail);
+              timeline.append(entry);
+            });
+          return timeline;
+        }
+        if (node.type === 'paragraph' && node.cards) {
+          const cards = document.createElement('div');
+          cards.style.cssText =
+            'display: grid; gap: .45rem; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%;';
+          node.text
+            .split('\n')
+            .filter(Boolean)
+            .forEach((line) => {
+              const [icon, title, ...description] = line.split('|').map((part) => part.trim());
+              const card = document.createElement('article');
+              card.style.cssText =
+                'background: var(--np-panel); border: 1px solid var(--np-border); border-radius: .35rem; box-sizing: border-box; min-width: 0; padding: .45rem; text-align: left;';
+              const symbol = document.createElement('div');
+              symbol.style.cssText = 'color: var(--np-accent); font-size: 1.25rem;';
+              symbol.textContent = icon;
+              const heading = document.createElement('strong');
+              heading.style.display = 'block';
+              appendInlineContent(heading, title || icon);
+              const detail = document.createElement('span');
+              detail.style.cssText =
+                'color: var(--np-muted); display: block; font-size: .72rem; margin-top: .25rem;';
+              appendInlineContent(detail, description.join(' | '));
+              card.append(symbol, heading, detail);
+              cards.append(card);
+            });
+          applyBlockStyle(cards, node.blockStyle);
+          return cards;
+        }
+        if (node.type === 'paragraph' && node.buttonHref) {
+          const button = document.createElement('a');
+          button.className = 'slide-button';
+          button.href = node.buttonHref;
+          button.rel = 'noopener noreferrer';
+          if (/^#slide=\d+$/i.test(node.buttonHref)) {
+            button.addEventListener('click', (event) => {
+              event.preventDefault();
+              channel.postMessage({
+                type: 'navigate',
+                direction: 'goto',
+                index: Number(node.buttonHref.split('=').at(-1)) - 1
+              });
+            });
+          } else {
+            button.target = '_blank';
+          }
+          button.textContent = node.text;
+          return button;
+        }
+        const element = document.createElement(
+          node.type === 'heading'
+            ? `h${node.level}`
+            : node.type === 'paragraph'
+              ? 'p'
+              : node.type === 'quote'
+                ? 'blockquote'
+                : 'div'
+        );
+        if (node.type === 'paragraph' && node.callout) {
+          element.className = `callout callout-${node.callout}`;
+          const label = document.createElement('strong');
+          label.className = 'callout-label';
+          label.textContent = node.callout.charAt(0).toUpperCase() + node.callout.slice(1);
+          element.append(label);
+        }
+        if (node.type === 'paragraph' && node.titleMeta)
+          element.className = `title-${node.titleMeta}`;
+        if (node.type === 'quote') {
+          const { attribution, quote } = splitQuoteAttribution(node.text);
+          appendInlineContent(element, quote);
+          if (attribution) {
+            const source = document.createElement('span');
+            source.className = 'quote-attribution';
+            source.textContent = attribution;
+            element.append(source);
+          }
+        } else if (node.type === 'heading' || node.type === 'paragraph')
+          appendInlineContent(element, node.text);
+        else if (node.type === 'code') {
+          const code = document.createElement('pre');
+          appendHighlightedCode(code, node.code, node.language, theme);
+          if (node.lineNumbers) {
+            element.className = 'code-preview';
+            const numbers = document.createElement('pre');
+            numbers.className = 'code-line-numbers';
+            const lineNumberStart = Math.max(0, Number(node.lineNumberStart ?? 1));
+            numbers.textContent = node.code
+              .split('\n')
+              .map((_, index) => String(index + lineNumberStart))
+              .join('\n');
+            element.append(numbers, code);
+          } else {
+            element.append(code);
+          }
+        } else if (node.type === 'image') {
+          element.className = 'image-preview';
+          const image = document.createElement('img');
+          image.src = node.src;
+          image.alt = node.alt || '';
+          element.append(image);
+          if (node.alt) {
+            const caption = document.createElement('span');
+            caption.className = 'image-caption';
+            caption.textContent = node.alt;
+            element.append(caption);
+          }
+        } else if (node.type === 'list') {
+          const list = document.createElement(node.ordered ? 'ol' : 'ul');
+          const visibleItems = Math.max(0, revealState.remaining);
+          revealState.remaining = Math.max(0, revealState.remaining - node.items.length);
+          node.items.slice(0, visibleItems).forEach((item) => {
+            const entry = document.createElement('li');
+            const task = item.match(/^\[([ xX])]\s+(.+)$/);
+            if (task) {
+              entry.style.listStyle = 'none';
+              const marker = document.createElement('span');
+              marker.style.color = task[1].toLowerCase() === 'x' ? '#818cf8' : '#91a4cb';
+              marker.textContent = task[1].toLowerCase() === 'x' ? '☑ ' : '☐ ';
+              entry.append(marker);
+              appendInlineContent(entry, task[2]);
+            } else {
+              appendInlineContent(entry, item);
+            }
+            list.append(entry);
+          });
+          element.append(list);
+        } else if (node.type === 'table') {
+          const table = document.createElement('table');
+          const header = document.createElement('tr');
+          node.headers.forEach((value, index) => {
+            const cell = document.createElement('th');
+            cell.style.textAlign = node.alignments?.[index] || 'left';
+            appendInlineContent(cell, value);
+            header.append(cell);
+          });
+          table.append(header);
+          node.rows.slice(0, 5).forEach((row) => {
+            const tr = document.createElement('tr');
+            row.forEach((value, index) => {
+              const cell = document.createElement('td');
+              cell.style.textAlign = node.alignments?.[index] || 'left';
+              appendInlineContent(cell, value);
+              tr.append(cell);
+            });
+            table.append(tr);
+          });
+          element.append(table);
+        } else if (node.type === 'chart') {
+          const chart = createChartPreview(node);
+          applyBlockStyle(chart, node.blockStyle);
+          return chart;
+        } else if (node.type === 'columns') {
+          element.className = node.layout === 'grid' ? 'columns grid' : 'columns';
+          if (node.layout === 'grid')
+            element.style.gridTemplateColumns = `repeat(${node.columnsPerRow || 2}, minmax(0, 1fr))`;
+          node.columns.forEach((column) => {
+            const cell = document.createElement('div');
+            column.forEach((child) => cell.append(createNode(child, revealState, theme)));
+            element.append(cell);
+          });
+        } else if (node.type === 'pdf') element.textContent = `PDF · page ${node.page}`;
+        else if (node.type === 'audio' || node.type === 'video')
+          element.textContent = `${node.type} · ${node.src}`;
+        applyBlockStyle(element, node.blockStyle);
+        return element;
+      }
+
+      function applyBlockStyle(element, options) {
+        if (!options || typeof options !== 'object') return;
+        const specification = `style:${Object.entries(options)
+          .map(([key, value]) => `${key}=${value}`)
+          .join(';')}`;
+        const style = createInlineStyle(specification);
+        // Preserve the renderer's grid, flex, table, or media layout.
+        delete style.display;
+        Object.assign(element.style, style);
+      }
+
+      function appendHighlightedCode(element, code, language, theme) {
+        highlightCode(code, language, theme).forEach((token) => {
+          if (token.vtype === 'text') {
+            element.append(document.createTextNode(token.text));
+            return;
+          }
+          const span = document.createElement('span');
+          span.textContent = token.text;
+          if (token.style?.color) span.style.color = token.style.color;
+          element.append(span);
+        });
+      }
+
+      let katexPreviewPromise;
+      async function renderMathPreview(target, source, displayMode = false) {
+        try {
+          katexPreviewPromise ??= import('./node_modules/katex/dist/katex.mjs').then(
+            ({ default: katex }) => katex
+          );
+          const katex = await katexPreviewPromise;
+          katex.render(source, target, {
+            displayMode,
+            throwOnError: true,
+            trust: false
+          });
+          requestAnimationFrame(() => {
+            const preview = target.closest('.slide-preview');
+            const content = target.closest('.preview-content');
+            if (preview && content) fitPreviewContent(preview, content);
+          });
+        } catch (error) {
+          target.textContent = 'Equation';
+          target.title = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      let mermaidPreviewPromise;
+      let mermaidPreviewSequence = 0;
+      async function renderMermaidPreview(target, source) {
+        try {
+          mermaidPreviewPromise ??= import('./node_modules/mermaid/dist/mermaid.esm.min.mjs').then(
+            ({ default: mermaid }) => {
+              mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: 'strict',
+                theme: 'dark'
+              });
+              return mermaid;
+            }
+          );
+          const mermaid = await mermaidPreviewPromise;
+          const { svg } = await mermaid.render(
+            `neopresent-presenter-mermaid-${(mermaidPreviewSequence += 1)}`,
+            source
+          );
+          target.insertAdjacentHTML('afterbegin', svg);
+          requestAnimationFrame(() => {
+            const preview = target.closest('.slide-preview');
+            const content = target.closest('.preview-content');
+            if (preview && content) fitPreviewContent(preview, content);
+          });
+        } catch (error) {
+          target.textContent = 'Mermaid diagram';
+          target.title = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      function appendInlineContent(element, text) {
+        const inlinePattern =
+          /\{\{((?:font|color|size|offset|style):[^|{}]+)\|([^{}]+)\}\}|\{(color|size|offset):([^|{}]+)\|([^{}]+)\}|\[\^([^\]]+)]|\[([^\]]+)]\(([^\s)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|==([^=]+)==|~~([^~]+)~~|\$([^$\n]+)\$|\*([^*]+)\*/g;
+        let cursor = 0;
+        let match;
+        while ((match = inlinePattern.exec(text)) !== null) {
+          if (match.index > cursor)
+            element.append(document.createTextNode(text.slice(cursor, match.index)));
+          const [
+            markdown,
+            styleSpec,
+            styleText,
+            simpleStyleName,
+            simpleStyleValue,
+            simpleStyleText,
+            footnote,
+            label,
+            href,
+            boldText,
+            codeText,
+            highlightText,
+            strikeText,
+            mathText,
+            italicText
+          ] = match;
+          if (styleSpec && styleText) {
+            const span = document.createElement('span');
+            Object.assign(span.style, createInlineStyle(styleSpec));
+            span.textContent = styleText;
+            element.append(span);
+          } else if (simpleStyleName && simpleStyleText) {
+            const span = document.createElement('span');
+            Object.assign(span.style, createInlineStyle(`${simpleStyleName}:${simpleStyleValue}`));
+            span.textContent = simpleStyleText;
+            element.append(span);
+          } else if (footnote) {
+            const citation = document.createElement('sup');
+            citation.textContent = `[${footnote}]`;
+            element.append(citation);
+          } else if (label && href && /^(?:https?:|mailto:|\/|\.\/?)/i.test(href)) {
+            const link = document.createElement('a');
+            link.href = href;
+            link.rel = 'noopener noreferrer';
+            link.target = '_blank';
+            link.textContent = label;
+            element.append(link);
+          } else if (boldText) {
+            const strong = document.createElement('strong');
+            strong.textContent = boldText;
+            element.append(strong);
+          } else if (codeText) {
+            const code = document.createElement('code');
+            code.textContent = codeText;
+            element.append(code);
+          } else if (highlightText) {
+            const highlight = document.createElement('mark');
+            highlight.textContent = highlightText;
+            element.append(highlight);
+          } else if (strikeText) {
+            const strike = document.createElement('s');
+            strike.textContent = strikeText;
+            element.append(strike);
+          } else if (mathText) {
+            const math = document.createElement('span');
+            math.className = 'math-inline';
+            renderMathPreview(math, mathText);
+            element.append(math);
+          } else if (italicText) {
+            const emphasis = document.createElement('em');
+            emphasis.textContent = italicText;
+            element.append(emphasis);
+          } else {
+            element.append(document.createTextNode(markdown));
+          }
+          cursor = match.index + markdown.length;
+        }
+        if (cursor < text.length) element.append(document.createTextNode(text.slice(cursor)));
+      }
+
+      function createInlineStyle(specification) {
+        const style = {};
+        const source = specification.startsWith('style:') ? specification.slice(6) : specification;
+        const options = {};
+        source.split(';').forEach((declaration) => {
+          const separator = declaration.search(/[:=]/);
+          if (separator < 1) return;
+          const key = declaration.slice(0, separator).trim().toLowerCase();
+          const value = declaration.slice(separator + 1).trim();
+          if (!value) return;
+          options[key] = value;
+        });
+        if (options.font) style.fontFamily = options.font;
+        if (options.color)
+          style.color = withAlpha(options.color, options['color-alpha'] ?? options.alpha);
+        if (options.size && isInlineLength(options.size)) style.fontSize = options.size;
+        const offset = parseInlineOffset(options.offset);
+        if (offset)
+          Object.assign(style, {
+            position: 'relative',
+            left: offset.x,
+            top: offset.y
+          });
+        const scale = Math.min(5, Number(options['frame-scale'] ?? 1));
+        if (Number.isFinite(scale) && scale > 0 && scale !== 1) style.transform = `scale(${scale})`;
+        const border = String(options.border ?? '').toLowerCase();
+        if (border === 'line') {
+          style.borderStyle = ['solid', 'dashed', 'dotted', 'double'].includes(
+            options['border-style']
+          )
+            ? options['border-style']
+            : 'solid';
+          style.borderColor = withAlpha(
+            options['border-color'] ?? 'currentColor',
+            options['border-alpha']
+          );
+          style.borderWidth = isInlineLength(options['border-size'])
+            ? options['border-size']
+            : '1px';
+          style.borderRadius = isInlineLength(options['border-radius'])
+            ? options['border-radius']
+            : '.12em';
+          style.padding = isInlineLength(options['border-padding'])
+            ? options['border-padding']
+            : '.08em .2em';
+        } else if (border === 'picture' || border === 'picture-frame') {
+          const size = isInlineLength(options['border-size']) ? options['border-size'] : '.18em';
+          style.border = `${size} solid ${withAlpha(options['border-color'] ?? '#f8fafc', options['border-alpha'])}`;
+          style.outline = `1px solid ${withAlpha(options['frame-inner-color'] ?? '#475569', options['border-alpha'])}`;
+          style.outlineOffset = `-${size}`;
+          style.padding = isInlineLength(options['border-padding'])
+            ? options['border-padding']
+            : '.18em .3em';
+        }
+        const shadow = String(options.shadow ?? '').toLowerCase();
+        if (['drop', 'contact', 'curved'].includes(shadow)) {
+          const shadowOffset = resolveShadowOffset(options);
+          const blur = isInlineLength(options['shadow-blur']) ? options['shadow-blur'] : '.2em';
+          const color = withAlpha(
+            options['shadow-color'] ?? '#000',
+            options['shadow-opacity'] ?? '35%'
+          );
+          if (shadow === 'drop')
+            style.filter = `drop-shadow(${shadowOffset.x} ${shadowOffset.y} ${blur} ${color})`;
+          if (shadow === 'contact')
+            style.boxShadow = `${shadowOffset.x} ${shadowOffset.y} ${blur} ${color}`;
+          if (shadow === 'curved')
+            style.boxShadow = createCurvedShadow(options, shadowOffset, color);
+        }
+        const reflection = parseInlineAlpha(options.reflection);
+        if (reflection > 0)
+          style.webkitBoxReflect = `below .08em linear-gradient(transparent 15%, rgba(255,255,255,${reflection}))`;
+        if (border || shadow || reflection > 0 || offset || style.transform)
+          style.display = 'inline-block';
+        return style;
+      }
+
+      function parseInlineOffset(value) {
+        if (!value) return null;
+        const [x = '0', y = '0'] = value.split(',').map((part) => part.trim());
+        return isInlineLength(x, true) && isInlineLength(y, true) ? { x, y } : null;
+      }
+
+      function resolveShadowOffset(options) {
+        const explicit = parseInlineOffset(options['shadow-offset']);
+        const angle = Number.parseFloat(options['shadow-angle']);
+        if (!Number.isFinite(angle)) return explicit ?? { x: '0', y: '.22em' };
+        const distance = parseInlineLength(options['shadow-distance']) ?? {
+          number: 0.22,
+          unit: 'em'
+        };
+        const radians = (angle * Math.PI) / 180;
+        return {
+          x: `${trimInlineNumber(Math.cos(radians) * distance.number)}${distance.unit}`,
+          y: `${trimInlineNumber(Math.sin(radians) * distance.number)}${distance.unit}`
+        };
+      }
+
+      function createCurvedShadow(options, offset, color) {
+        const rawCurve = String(
+          options['shadow-curve'] ?? options.curve ?? 'outward'
+        ).toLowerCase();
+        const curve = rawCurve === 'inward' ? -50 : rawCurve === 'outward' ? 50 : Number(rawCurve);
+        const amount = Math.max(-100, Math.min(100, Number.isFinite(curve) ? curve : 50)) / 250;
+        const spread = isInlineLength(options['shadow-size']) ? options['shadow-size'] : '.04em';
+        const sideY = amount > 0 ? `calc(${offset.y} + ${amount}em)` : offset.y;
+        const centerY = amount < 0 ? `calc(${offset.y} + ${Math.abs(amount)}em)` : offset.y;
+        return `calc(${offset.x} - .35em) ${sideY} 0 ${spread} ${color}, ${offset.x} ${centerY} 0 ${spread} ${color}, calc(${offset.x} + .35em) ${sideY} 0 ${spread} ${color}`;
+      }
+
+      function parseInlineLength(value) {
+        const match = String(value ?? '').match(/^(-?(?:\d+(?:\.\d+)?|\.\d+))(px|rem|em|%|vw|vh)$/);
+        return match ? { number: Number(match[1]), unit: match[2] } : null;
+      }
+
+      function trimInlineNumber(value) {
+        return Number(value.toFixed(4));
+      }
+
+      function parseInlineAlpha(value) {
+        if (!value) return 0;
+        const number = Number.parseFloat(value);
+        if (!Number.isFinite(number)) return 0;
+        return Math.max(0, Math.min(1, value.endsWith('%') || number > 1 ? number / 100 : number));
+      }
+
+      function withAlpha(color, alpha) {
+        return alpha
+          ? `color-mix(in srgb, ${color} ${parseInlineAlpha(alpha) * 100}%, transparent)`
+          : color;
+      }
+
+      function isInlineLength(value, allowZero = false) {
+        return (
+          /^(?:-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|vw|vh)|0)$/.test(value) &&
+          (allowZero || !value.startsWith('-'))
+        );
+      }
+
+      function splitQuoteAttribution(text) {
+        const lines = text.split('\n');
+        const lastLine = lines.at(-1)?.trim() || '';
+        if (!/^(?:—|--|-)\s+/.test(lastLine)) return { attribution: '', quote: text };
+        return { attribution: lastLine, quote: lines.slice(0, -1).join('\n') };
+      }
+
+      function createChartPreview(chart) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chart';
+        if (chart.title) {
+          const title = document.createElement('p');
+          title.className = 'chart-title';
+          title.textContent = chart.title;
+          wrapper.append(title);
+        }
+        const scientificMarkup = createScientificChartMarkup(chart, presenterTheme);
+        if (scientificMarkup) {
+          wrapper.insertAdjacentHTML('beforeend', scientificMarkup);
+          wrapper.querySelectorAll('[data-katex-source]').forEach((target) => {
+            renderMathPreview(
+              target,
+              target.dataset.katexSource || '',
+              target.dataset.katexDisplay === 'display'
+            );
+          });
+          return wrapper;
+        }
+
+        const values = chart.values.map(Number).filter(Number.isFinite);
+        if (values.length === 0) {
+          wrapper.textContent = 'No chart data';
+          return wrapper;
+        }
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 300 120');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', chart.title || 'Chart preview');
+        const isScatter = chart.kind === 'scatter';
+        const errors =
+          Array.isArray(chart.errorValues) && chart.errorValues.length === values.length
+            ? chart.errorValues
+                .map(Number)
+                .map((value) => (Number.isFinite(value) && value >= 0 ? value : 0))
+            : values.map(() => 0);
+        const low = Math.min(
+          ...values.map((value, index) => value - errors[index]),
+          ...(isScatter ? [] : [0])
+        );
+        const high = Math.max(
+          ...values.map((value, index) => value + errors[index]),
+          ...(isScatter ? [] : [0])
+        );
+        const range = Math.max(high - low, 1);
+        const xValues =
+          isScatter && Array.isArray(chart.xValues) && chart.xValues.length === values.length
+            ? chart.xValues.map(Number)
+            : values.map((_, index) => index + 1);
+        const xLow = Math.min(...xValues);
+        const xHigh = Math.max(...xValues);
+        const xRange = Math.max(xHigh - xLow, 1);
+        const x = (index) =>
+          isScatter
+            ? 16 + ((xValues[index] - xLow) / xRange) * 268
+            : values.length === 1
+              ? 150
+              : 16 + (index * 268) / (values.length - 1);
+        const y = (value) => 104 - ((value - low) / range) * 88;
+
+        const axis = document.createElementNS(svg.namespaceURI, 'path');
+        axis.setAttribute('d', 'M 16 104 H 284');
+        axis.setAttribute('stroke', '#52658f');
+        axis.setAttribute('fill', 'none');
+        svg.append(axis);
+
+        if (chart.xLabel) {
+          const xLabel = document.createElementNS(svg.namespaceURI, 'text');
+          xLabel.setAttribute('x', '150');
+          xLabel.setAttribute('y', '118');
+          xLabel.setAttribute('fill', '#c5d1ef');
+          xLabel.setAttribute('font-size', '8');
+          xLabel.setAttribute('text-anchor', 'middle');
+          xLabel.textContent = chart.xLabel;
+          svg.append(xLabel);
+        }
+        if (chart.yLabel) {
+          const yLabel = document.createElementNS(svg.namespaceURI, 'text');
+          yLabel.setAttribute('x', '8');
+          yLabel.setAttribute('y', '60');
+          yLabel.setAttribute('fill', '#c5d1ef');
+          yLabel.setAttribute('font-size', '8');
+          yLabel.setAttribute('text-anchor', 'middle');
+          yLabel.setAttribute('transform', 'rotate(-90 8 60)');
+          yLabel.textContent = chart.yLabel;
+          svg.append(yLabel);
+        }
+
+        if (chart.kind === 'boxplot') {
+          const sorted = [...values].sort((left, right) => left - right);
+          const percentile = (fraction) => {
+            const position = (sorted.length - 1) * fraction;
+            const lower = Math.floor(position);
+            const upper = Math.ceil(position);
+            return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+          };
+          const center = 150;
+          const boxWidth = 92;
+          const q1 = percentile(0.25);
+          const median = percentile(0.5);
+          const q3 = percentile(0.75);
+          const whisker = document.createElementNS(svg.namespaceURI, 'path');
+          whisker.setAttribute(
+            'd',
+            `M ${center} ${y(sorted.at(-1))} V ${y(q3)} M ${center} ${y(q1)} V ${y(sorted[0])}`
+          );
+          whisker.setAttribute('stroke', '#a5b4fc');
+          whisker.setAttribute('stroke-width', '2');
+          svg.append(whisker);
+          const box = document.createElementNS(svg.namespaceURI, 'rect');
+          box.setAttribute('x', String(center - boxWidth / 2));
+          box.setAttribute('y', String(y(q3)));
+          box.setAttribute('width', String(boxWidth));
+          box.setAttribute('height', String(Math.max(1, y(q1) - y(q3))));
+          box.setAttribute('fill', '#818cf8');
+          box.setAttribute('fill-opacity', '.3');
+          box.setAttribute('stroke', '#a5b4fc');
+          svg.append(box);
+          const medianLine = document.createElementNS(svg.namespaceURI, 'path');
+          medianLine.setAttribute(
+            'd',
+            `M ${center - boxWidth / 2} ${y(median)} H ${center + boxWidth / 2}`
+          );
+          medianLine.setAttribute('stroke', '#fbbf24');
+          medianLine.setAttribute('stroke-width', '2');
+          svg.append(medianLine);
+        } else if (chart.kind === 'histogram') {
+          const binCount = Math.min(Math.max(1, Number(chart.bins) || 10), values.length);
+          const minimum = Math.min(...values);
+          const maximum = Math.max(...values);
+          const binSize = Math.max(maximum - minimum, 1) / binCount;
+          const counts = Array.from({ length: binCount }, () => 0);
+          values.forEach(
+            (value) =>
+              (counts[
+                Math.min(binCount - 1, Math.max(0, Math.floor((value - minimum) / binSize)))
+              ] += 1)
+          );
+          const top = Math.max(...counts, 1);
+          counts.forEach((count, index) => {
+            const bar = document.createElementNS(svg.namespaceURI, 'rect');
+            const barHeight = (count / top) * 88;
+            bar.setAttribute('x', String(16 + (index * 268) / binCount + 1));
+            bar.setAttribute('y', String(104 - barHeight));
+            bar.setAttribute('width', String(268 / binCount - 2));
+            bar.setAttribute('height', String(Math.max(1, barHeight)));
+            bar.setAttribute('fill', '#818cf8');
+            svg.append(bar);
+          });
+        } else if (chart.kind === 'bar') {
+          const baseline = y(0);
+          const width = Math.max(8, 220 / values.length);
+          values.forEach((value, index) => {
+            const bar = document.createElementNS(svg.namespaceURI, 'rect');
+            const valueY = y(value);
+            bar.setAttribute('x', String(x(index) - width / 2));
+            bar.setAttribute('y', String(Math.min(valueY, baseline)));
+            bar.setAttribute('width', String(width));
+            bar.setAttribute('height', String(Math.abs(baseline - valueY)));
+            bar.setAttribute('fill', '#818cf8');
+            svg.append(bar);
+          });
+        } else if (isScatter) {
+          if (chart.trendline && values.length > 1) {
+            const meanX = xValues.reduce((total, value) => total + value, 0) / xValues.length;
+            const meanY = values.reduce((total, value) => total + value, 0) / values.length;
+            const variance = xValues.reduce((total, value) => total + (value - meanX) ** 2, 0);
+            if (variance > 0) {
+              const slope =
+                values.reduce(
+                  (total, value, index) => total + (xValues[index] - meanX) * (value - meanY),
+                  0
+                ) / variance;
+              const intercept = meanY - slope * meanX;
+              const trend = document.createElementNS(svg.namespaceURI, 'path');
+              trend.setAttribute(
+                'd',
+                `M 16 ${y(slope * xLow + intercept)} L 284 ${y(slope * xHigh + intercept)}`
+              );
+              trend.setAttribute('fill', 'none');
+              trend.setAttribute('stroke', '#c5d1ef');
+              trend.setAttribute('stroke-dasharray', '5 4');
+              trend.setAttribute('stroke-width', '2');
+              svg.append(trend);
+            }
+          }
+          values.forEach((value, index) => {
+            if (errors[index] > 0) {
+              const errorBar = document.createElementNS(svg.namespaceURI, 'path');
+              const top = y(value + errors[index]);
+              const bottom = y(value - errors[index]);
+              errorBar.setAttribute(
+                'd',
+                `M ${x(index)} ${top} V ${bottom} M ${x(index) - 4} ${top} H ${x(index) + 4} M ${x(index) - 4} ${bottom} H ${x(index) + 4}`
+              );
+              errorBar.setAttribute('stroke', '#c5d1ef');
+              errorBar.setAttribute('stroke-width', '1.5');
+              svg.append(errorBar);
+            }
+            const point = document.createElementNS(svg.namespaceURI, 'circle');
+            point.setAttribute('cx', String(x(index)));
+            point.setAttribute('cy', String(y(value)));
+            point.setAttribute('r', '3.5');
+            point.setAttribute('fill', '#fbbf24');
+            svg.append(point);
+          });
+        } else {
+          if (chart.kind === 'area') {
+            const area = document.createElementNS(svg.namespaceURI, 'polygon');
+            area.setAttribute(
+              'points',
+              `16,104 ${values.map((value, index) => `${x(index)},${y(value)}`).join(' ')} 284,104`
+            );
+            area.setAttribute('fill', '#818cf8');
+            area.setAttribute('opacity', '.24');
+            svg.append(area);
+          }
+          const line = document.createElementNS(svg.namespaceURI, 'polyline');
+          line.setAttribute(
+            'points',
+            values.map((value, index) => `${x(index)},${y(value)}`).join(' ')
+          );
+          line.setAttribute('fill', 'none');
+          line.setAttribute('stroke', '#a5b4fc');
+          line.setAttribute('stroke-linecap', 'round');
+          line.setAttribute('stroke-linejoin', 'round');
+          line.setAttribute('stroke-width', '3');
+          svg.append(line);
+          values.forEach((value, index) => {
+            const point = document.createElementNS(svg.namespaceURI, 'circle');
+            point.setAttribute('cx', String(x(index)));
+            point.setAttribute('cy', String(y(value)));
+            point.setAttribute('r', '3');
+            point.setAttribute('fill', '#fbbf24');
+            svg.append(point);
+          });
+        }
+        wrapper.append(svg);
+        return wrapper;
+      }
+    </script>
+  </body>
+</html>

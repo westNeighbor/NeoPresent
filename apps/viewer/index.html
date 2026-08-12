@@ -1,0 +1,3098 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>NeoPresent Viewer</title>
+    <link rel="stylesheet" href="./node_modules/katex/dist/katex.min.css" />
+    <style>
+      :root {
+        --neopresent-letterbox-color: #020617;
+      }
+
+      html,
+      body {
+        background: var(--neopresent-letterbox-color);
+        height: 100%;
+        margin: 0;
+        min-height: 100%;
+        min-width: 100%;
+        overflow: hidden;
+        width: 100%;
+      }
+
+      .neo-viewport {
+        background: var(--neopresent-letterbox-color) !important;
+        height: 100vh !important;
+        inset: 0 !important;
+        min-height: 100vh !important;
+        min-width: 100vw !important;
+        overflow: hidden !important;
+        position: fixed !important;
+        width: 100vw !important;
+      }
+
+      /*
+       * Neo's nested card layouts otherwise use the zoomed slide as their
+       * intrinsic height. Keep the entire audience-stage chain full-height so
+       * the stable slide host has real letterbox space in which to center.
+       */
+      .neo-viewport > .neo-container.neo-layout-card,
+      .neo-viewport
+        > .neo-container.neo-layout-card
+        > .neo-container.neo-layout-card.neo-layout-card-item,
+      [data-neopresent-slide-host] {
+        height: 100% !important;
+        min-height: 100% !important;
+        width: 100% !important;
+      }
+
+      [data-neopresent-slide-host] {
+        align-items: center !important;
+        display: flex !important;
+        justify-content: center !important;
+      }
+
+      /*
+       * Match the presenter preview's prepare-then-reveal behavior. A newly
+       * mounted slide stays hidden for its first layout pass so its 1600-unit
+       * design canvas can never flash at an unscaled size.
+       */
+      [data-neopresent-slide-host]
+        > [data-neopresent-slide]:not([data-neopresent-uniform-ready='true']) {
+        visibility: hidden !important;
+      }
+
+      .neo-viewport .neopresent-toc-panel {
+        background: color-mix(in srgb, var(--np-panel) 64%, transparent) !important;
+        border-color: var(--np-border) !important;
+        color: var(--np-foreground) !important;
+        display: none !important;
+      }
+
+      html.neopresent-toc-open .neo-viewport .neopresent-toc-panel {
+        display: block !important;
+      }
+
+      .neo-viewport .neopresent-toc-panel a.neopresent-toc-current {
+        background: color-mix(in srgb, var(--np-accent) 20%, transparent) !important;
+        box-shadow: inset 3px 0 0 var(--np-accent);
+        color: var(--np-foreground) !important;
+      }
+
+      .neo-viewport .neopresent-toc-panel a.neopresent-toc-focus {
+        background: color-mix(in srgb, var(--np-accent) 18%, transparent) !important;
+        box-shadow: none;
+        color: var(--np-foreground) !important;
+        outline: 2px solid var(--np-accent);
+        outline-offset: -2px;
+      }
+
+      .neo-viewport .neopresent-filmstrip-panel {
+        display: none !important;
+      }
+
+      .neopresent-filmstrip-snapshot {
+        pointer-events: none !important;
+        transition: opacity 140ms ease-out;
+        z-index: 46 !important;
+      }
+
+      html.neopresent-filmstrip-open .neo-viewport .neopresent-filmstrip-panel {
+        display: flex !important;
+      }
+
+      /* Overview thumbnails always show their stable final frame. This also
+       * catches generated plot/SVG animation rules that are not represented
+       * by inline VDOM styles. Card and camera transitions live outside this
+       * marked preview subtree and remain active. */
+      [data-neopresent-overview-preview],
+      [data-neopresent-overview-preview] * {
+        animation-delay: -100000s !important;
+        animation-fill-mode: both !important;
+        animation-play-state: paused !important;
+        transition: none !important;
+      }
+
+      html:fullscreen,
+      html:fullscreen body,
+      html:fullscreen .neo-viewport {
+        background: var(--neopresent-letterbox-color) !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        max-width: 100vw !important;
+        min-height: 100vh !important;
+        min-width: 100vw !important;
+        overflow: hidden !important;
+        width: 100vw !important;
+      }
+
+      html[data-neopresent-zoomed='true'] {
+        overflow: hidden !important;
+      }
+
+      html[data-neopresent-zoomed='true'] body {
+        min-height: 100vh;
+        min-width: 100vw;
+        overflow: hidden !important;
+      }
+
+      .neopresent-zoom-scroll-surface {
+        left: 0;
+        opacity: 0;
+        pointer-events: none;
+        position: absolute;
+        top: 0;
+        z-index: -1;
+      }
+
+      .neopresent-zoom-scrollbar {
+        accent-color: #64748b;
+        display: none;
+        margin: 0;
+        position: fixed;
+        z-index: 10001;
+      }
+
+      .neopresent-zoom-scrollbar-horizontal {
+        bottom: 4px;
+        height: 14px;
+        left: 8px;
+        width: calc(100vw - 32px);
+      }
+
+      .neopresent-zoom-scrollbar-vertical {
+        direction: rtl;
+        height: calc(100vh - 32px);
+        right: 4px;
+        top: 8px;
+        width: 14px;
+        writing-mode: vertical-lr;
+      }
+
+      @keyframes neopresent-fade-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes neopresent-slide-left {
+        from {
+          opacity: 0;
+          transform: translateX(8vw);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      @keyframes neopresent-slide-right {
+        from {
+          opacity: 0;
+          transform: translateX(-8vw);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      @keyframes neopresent-slide-up {
+        from {
+          opacity: 0;
+          transform: translateY(8vh);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes neopresent-slide-down {
+        from {
+          opacity: 0;
+          transform: translateY(-8vh);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes neopresent-zoom-in {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes neopresent-flip-in {
+        from {
+          opacity: 0;
+          transform: perspective(1000px) rotateY(-15deg) scale(0.97);
+        }
+        to {
+          opacity: 1;
+          transform: perspective(1000px) rotateY(0) scale(1);
+        }
+      }
+
+      @keyframes neopresent-helix-card-move {
+        from {
+          opacity: var(--neopresent-helix-from-opacity);
+          transform: var(--neopresent-helix-from-transform);
+        }
+        to {
+          opacity: var(--neopresent-helix-to-opacity);
+          transform: var(--neopresent-helix-to-transform);
+        }
+      }
+
+      @keyframes neopresent-chart-fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes neopresent-chart-rise {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes neopresent-chart-grow {
+        from {
+          opacity: 0;
+          transform: scale(0.88);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes neopresent-chart-draw {
+        from {
+          opacity: 0;
+          stroke-dashoffset: 1;
+        }
+        to {
+          opacity: 1;
+          stroke-dashoffset: 0;
+        }
+      }
+      @keyframes neopresent-chart-reveal-x {
+        from {
+          clip-path: inset(0 100% 0 0);
+        }
+        to {
+          clip-path: inset(0 0 0 0);
+        }
+      }
+      @keyframes neopresent-table-glow {
+        from {
+          filter: brightness(0.96) saturate(1);
+        }
+        to {
+          filter: brightness(1.38) saturate(1.35);
+        }
+      }
+      @keyframes neopresent-table-light-flow {
+        from {
+          background-position: 180% 0;
+        }
+        to {
+          background-position: -80% 0;
+        }
+      }
+      @keyframes neopresent-plot-glow {
+        from {
+          filter: drop-shadow(0 0 1px var(--neopresent-highlight-color)) brightness(0.98);
+        }
+        to {
+          filter: drop-shadow(0 0 9px var(--neopresent-highlight-color)) brightness(1.32)
+            saturate(1.25);
+        }
+      }
+      @keyframes neopresent-plot-flow {
+        0% {
+          filter: drop-shadow(-8px 0 1px transparent) brightness(0.98);
+        }
+        45% {
+          filter: drop-shadow(-2px 0 5px var(--neopresent-highlight-color)) brightness(1.25);
+        }
+        55% {
+          filter: drop-shadow(2px 0 8px var(--neopresent-highlight-color)) brightness(1.38);
+        }
+        100% {
+          filter: drop-shadow(8px 0 1px transparent) brightness(0.98);
+        }
+      }
+      @keyframes neopresent-text-typing {
+        from {
+          clip-path: inset(0 100% 0 0);
+        }
+        to {
+          clip-path: inset(0 0 0 0);
+        }
+      }
+      @keyframes neopresent-text-caret {
+        0%,
+        100% {
+          border-right-color: transparent;
+        }
+        50% {
+          border-right-color: var(--neopresent-typing-cursor-color, currentColor);
+        }
+      }
+      @keyframes neopresent-block-enter-fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes neopresent-block-enter-grow {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes neopresent-pdf-enter-grow {
+        from {
+          opacity: 0;
+          transform: scale(0.82);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes neopresent-block-enter-zoom {
+        from {
+          max-height: 0;
+          opacity: 0;
+          zoom: 35%;
+        }
+        to {
+          max-height: 100vh;
+          opacity: 1;
+          zoom: var(--neopresent-block-base-zoom, 100%);
+        }
+      }
+      @keyframes neopresent-block-enter-rise {
+        from {
+          opacity: 0;
+          transform: translateY(1.5rem);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes neopresent-block-shrink {
+        from {
+          opacity: 1;
+          zoom: var(--neopresent-block-base-zoom, 100%);
+        }
+        to {
+          opacity: 1;
+          zoom: var(--neopresent-block-target-zoom, 35%);
+        }
+      }
+      @keyframes neopresent-block-replace {
+        from {
+          opacity: 1;
+          transform: scale(1);
+        }
+        to {
+          opacity: 0;
+          transform: scale(0.98);
+        }
+      }
+
+      .neo-animation-wrapper {
+        transition: transform 300ms ease;
+      }
+
+      .neopresent-viewer-controls.neo-toolbar {
+        align-items: center !important;
+        backdrop-filter: blur(24px) saturate(155%);
+        -webkit-backdrop-filter: blur(24px) saturate(155%);
+        background: color-mix(
+          in srgb,
+          var(--np-controls-panel, var(--np-panel)) 70%,
+          transparent
+        ) !important;
+        border-top: 1px solid var(--np-border) !important;
+        box-shadow:
+          0 -1px 0 rgba(255, 255, 255, 0.14) inset,
+          0 -14px 36px rgba(0, 0, 0, 0.18);
+        color: var(--np-foreground) !important;
+        display: flex !important;
+        flex-flow: row nowrap !important;
+        gap: 0.5rem;
+        justify-content: center !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0.55rem max(0.75rem, env(safe-area-inset-right)) 0.55rem
+          max(0.75rem, env(safe-area-inset-left));
+        scrollbar-width: thin;
+      }
+
+      .neopresent-viewer-controls > * {
+        flex: 0 0 auto !important;
+      }
+
+      .neopresent-viewer-controls .neo-button {
+        background: color-mix(
+          in srgb,
+          var(--np-controls-surface, var(--np-surface)) 78%,
+          transparent
+        ) !important;
+        border: 1px solid var(--np-border) !important;
+        border-radius: 999px !important;
+        box-shadow:
+          0 1px 1px rgba(255, 255, 255, 0.1) inset,
+          0 5px 14px rgba(0, 0, 0, 0.14);
+        color: inherit !important;
+        height: 2.55rem !important;
+        min-width: max-content;
+        padding: 0 1rem !important;
+        transition:
+          background-color 160ms ease,
+          border-color 160ms ease,
+          box-shadow 160ms ease,
+          transform 160ms ease !important;
+      }
+
+      .neopresent-viewer-controls .neo-button-text {
+        color: currentColor !important;
+        font:
+          650 0.86rem/1 system-ui,
+          sans-serif !important;
+        letter-spacing: 0.01em;
+        text-transform: none !important;
+      }
+
+      .neopresent-viewer-controls .neo-button:hover {
+        background: color-mix(in srgb, var(--np-accent) 24%, transparent) !important;
+        border-color: color-mix(in srgb, var(--np-accent) 62%, transparent) !important;
+        box-shadow:
+          0 1px 1px rgba(255, 255, 255, 0.16) inset,
+          0 7px 18px rgba(0, 0, 0, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .neopresent-viewer-controls .neo-button:active {
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2) inset;
+        transform: translateY(1px) scale(0.98);
+      }
+
+      .neopresent-viewer-controls .neo-button:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--np-accent) 55%, transparent) !important;
+        outline-offset: 2px;
+      }
+
+      .neopresent-viewer-controls .neo-button.neo-disabled {
+        box-shadow: none;
+        cursor: not-allowed;
+        opacity: 0.38 !important;
+        transform: none;
+      }
+
+      .neopresent-viewer-controls .neo-label {
+        border-left: 1px solid var(--np-border);
+        border-right: 1px solid var(--np-border);
+        color: var(--np-muted) !important;
+        font:
+          700 0.84rem/1 system-ui,
+          sans-serif;
+        font-variant-numeric: tabular-nums;
+        margin: 0 0.15rem;
+        opacity: 0.82;
+        padding: 0.4rem 0.85rem;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 760px) {
+        .neopresent-viewer-controls.neo-toolbar {
+          justify-content: flex-start !important;
+        }
+
+        .neopresent-viewer-controls .neo-button {
+          padding: 0 0.75rem !important;
+        }
+      }
+
+      .neopresent-help-dialog {
+        align-items: center;
+        backdrop-filter: blur(5px) saturate(0.72);
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        inset: 0;
+        justify-content: center;
+        padding: 1.5rem;
+        position: fixed;
+        z-index: 10000;
+      }
+
+      .neopresent-help-dialog[hidden] {
+        display: none;
+      }
+
+      .neopresent-help-card {
+        backdrop-filter: blur(20px) saturate(1.16);
+        background: color-mix(in srgb, var(--np-panel, #0f172a) 88%, transparent);
+        border: 1px solid var(--np-border, #52658f);
+        border-radius: 1rem;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+        color: var(--np-foreground, #f8fafc);
+        max-height: min(82vh, 760px);
+        max-width: 620px;
+        overflow: auto;
+        padding: 1.5rem;
+        width: 100%;
+      }
+
+      .neopresent-help-heading {
+        align-items: center;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+      }
+
+      .neopresent-help-heading h2 {
+        font-size: 1.35rem;
+        margin: 0;
+      }
+
+      .neopresent-help-status {
+        background: color-mix(in srgb, var(--np-accent, #38bdf8) 18%, transparent);
+        border: 1px solid color-mix(in srgb, var(--np-accent, #38bdf8) 55%, transparent);
+        border-radius: 999px;
+        color: var(--np-accent, #7dd3fc);
+        font-size: 0.78rem;
+        font-weight: 750;
+        padding: 0.3rem 0.65rem;
+      }
+
+      .neopresent-help-description {
+        color: var(--np-muted, #94a3b8);
+        line-height: 1.45;
+        margin: 0.75rem 0 1.1rem;
+      }
+
+      .neopresent-help-grid {
+        display: grid;
+        gap: 0.62rem 1.1rem;
+        grid-template-columns: max-content minmax(0, 1fr);
+      }
+
+      .neopresent-help-grid kbd {
+        align-self: start;
+        background: color-mix(in srgb, var(--np-surface, #1e293b) 88%, transparent);
+        border: 1px solid var(--np-border, #52658f);
+        border-radius: 0.38rem;
+        box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+        color: var(--np-foreground, #f8fafc);
+        font: 700 0.82rem ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 0.24rem 0.48rem;
+        text-align: center;
+      }
+
+      .neopresent-help-grid span {
+        line-height: 1.35;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div
+      aria-hidden="true"
+      aria-labelledby="neopresent-viewer-help-title"
+      aria-modal="true"
+      class="neopresent-help-dialog"
+      id="neopresent-viewer-help"
+      role="dialog"
+      hidden
+    >
+      <div class="neopresent-help-card" id="neopresent-viewer-help-card" tabindex="-1">
+        <div class="neopresent-help-heading">
+          <h2 id="neopresent-viewer-help-title">Viewer shortcuts</h2>
+          <span class="neopresent-help-status" id="neopresent-viewer-help-status"></span>
+        </div>
+        <p class="neopresent-help-description" id="neopresent-viewer-help-description"></p>
+        <div class="neopresent-help-grid" id="neopresent-viewer-help-grid"></div>
+      </div>
+    </div>
+    <script>
+      /*
+       * Browsers classify http://localhost as trustworthy but classify a LAN
+       * IPv4 address as insecure. Neo uses UUIDs only as transient client
+       * identifiers, so provide that small API when randomUUID is withheld on
+       * an otherwise useful local-network viewer URL.
+       */
+      (() => {
+        const createUuid = () => {
+          const hex = () =>
+            Math.floor(Math.random() * 0x100000000)
+              .toString(16)
+              .padStart(8, '0');
+          return `${hex()}-${hex().slice(0, 4)}-4${hex().slice(1, 4)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${hex().slice(1, 4)}-${hex()}${hex().slice(0, 4)}`;
+        };
+        if (!globalThis.crypto) Object.defineProperty(globalThis, 'crypto', { value: {} });
+        if (typeof globalThis.crypto.randomUUID !== 'function') {
+          Object.defineProperty(globalThis.crypto, 'randomUUID', { value: createUuid });
+        }
+      })();
+    </script>
+    <script>
+      (() => {
+        const channel = new BroadcastChannel('neopresent-deeplink');
+        const publishHash = () =>
+          channel.postMessage({
+            type: 'open-slide',
+            hash: window.location.hash
+          });
+        const freezeOverviewPreviewAnimations = (overview) => {
+          overview
+            .querySelectorAll(
+              '[data-neopresent-overview-preview]:not([data-neopresent-animations-frozen])'
+            )
+            .forEach((preview) => {
+              preview.dataset.neopresentAnimationsFrozen = 'true';
+              preview.getAnimations({ subtree: true }).forEach((animation) => {
+                try {
+                  const timing = animation.effect?.getComputedTiming();
+                  if (Number.isFinite(timing?.endTime)) animation.currentTime = timing.endTime;
+                  animation.pause();
+                } catch {
+                  // A browser may expose a read-only or already-finished
+                  // animation. The CSS freeze above remains the fallback.
+                }
+              });
+              preview.querySelectorAll('svg').forEach((svg) => {
+                try {
+                  svg.setCurrentTime?.(100000);
+                  svg.pauseAnimations?.();
+                } catch {
+                  // Non-SMIL SVG implementations need no extra handling.
+                }
+              });
+            });
+        };
+        const updateOverviewFocus = ({ direction = 0, index = 0, mode = 'grid' }) => {
+          const overview = document.querySelector(`[data-neopresent-overview="${mode}"]`);
+          if (!overview) return;
+          freezeOverviewPreviewAnimations(overview);
+          const cards = [...overview.querySelectorAll('[data-neopresent-overview-card]')];
+          const selectedIndex = Math.max(0, Math.min(Number(index) || 0, cards.length - 1));
+          const galleryColumnCount = Math.max(1, Math.ceil(cards.length / 3));
+          const selectedGalleryRow = Math.floor(selectedIndex / galleryColumnCount);
+          const selectedColumnInRow = selectedIndex % galleryColumnCount;
+          const selectedGalleryColumn =
+            selectedGalleryRow % 2 === 0
+              ? selectedColumnInRow
+              : galleryColumnCount - 1 - selectedColumnInRow;
+
+          if (mode === 'grid') {
+            const previous = overview.querySelector(
+              '[data-neopresent-overview-selected="true"]'
+            );
+            const selected = cards[selectedIndex];
+            if (previous && previous !== selected) {
+              previous.dataset.neopresentOverviewSelected = 'false';
+              previous.style.boxShadow = '0 8px 20px rgba(0,0,0,.18)';
+              previous.style.transform = '';
+              previous.style.zIndex = '1';
+            }
+            if (selected) {
+              selected.dataset.neopresentOverviewSelected = 'true';
+              selected.style.boxShadow =
+                '0 0 0 4px rgba(251,191,36,.28), 0 16px 34px rgba(0,0,0,.35)';
+              selected.style.transform = '';
+              selected.style.zIndex = '2';
+              selected.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            return;
+          }
+
+          cards.forEach((card, cardIndex) => {
+            const selected = cardIndex === selectedIndex;
+            const unselectedShadow = '0 8px 20px rgba(0,0,0,.18)';
+            card.dataset.neopresentOverviewSelected = String(selected);
+            card.dataset.neopresentGallerySelected = mode === 'gallery' ? String(selected) : '';
+
+            if (mode === 'gallery') {
+              const row = Math.floor(cardIndex / galleryColumnCount);
+              const columnInRow = cardIndex % galleryColumnCount;
+              const column =
+                row % 2 === 0 ? columnInRow : galleryColumnCount - 1 - columnInRow;
+              card.style.transform = `translate3d(calc(50vw + ${(column - selectedGalleryColumn) * 350}px), calc(50vh + ${(row - selectedGalleryRow) * 290}px), 0) translate(-50%, -50%)`;
+              card.style.opacity = selected ? '.95' : '1';
+              card.style.boxShadow = selected
+                ? '0 34px 80px rgba(0,0,0,.62)'
+                : unselectedShadow;
+              card.style.zIndex = selected ? '5' : '1';
+              const inner = card.querySelector('[data-neopresent-gallery-card-inner]');
+              if (inner) {
+                inner.getAnimations().forEach((animation) => animation.cancel());
+                inner.style.animation = 'none';
+                inner.style.transition = 'transform 1000ms cubic-bezier(.2,.6,.6,.9)';
+                inner.style.transform = selected
+                  ? 'translateZ(180px) scale(1.5)'
+                  : 'translateZ(0) scale(1)';
+              }
+              return;
+            }
+
+            const angle = (cardIndex - selectedIndex) * 32;
+            const radians = (angle * Math.PI) / 180;
+            const radius = 720;
+            const x = Math.sin(radians) * radius;
+            const y = angle * 1.2;
+            const z = Math.cos(radians) * radius - radius;
+            const opacityAngle = Math.min(180, Math.abs(angle % 360));
+            const opacity = 0.3 + 0.5 * (1 - Math.sin((opacityAngle * Math.PI) / 360));
+            card.style.transform = `translate3d(calc(50vw + ${x}px), calc(50vh + ${y}px), ${z}px) translate(-50%, -50%) rotateY(${angle}deg)`;
+            card.style.opacity = selected ? '1' : String(opacity);
+            card.style.boxShadow = selected ? '0 0 35px #61dfe5' : unselectedShadow;
+            card.style.zIndex = selected ? '5' : '1';
+          });
+
+          if (mode === 'gallery') {
+            const camera = overview.querySelector('[data-neopresent-gallery-camera]');
+            if (camera) {
+              camera.dataset.neopresentGalleryRotation = String(Math.sign(Number(direction) || 0));
+              camera.dataset.neopresentGalleryCamera = String(selectedIndex);
+            }
+          } else if (mode === 'helix') {
+            const group = overview.querySelector('[data-neopresent-helix-group]');
+            if (group) group.dataset.neopresentHelixGroup = String(selectedIndex);
+          }
+        };
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'request-hash') publishHash();
+          if (event.data?.type === 'set-hash') {
+            const hash = `#slide=${event.data.index}`;
+            if (window.location.hash !== hash) window.history.replaceState(null, '', hash);
+          }
+          if (event.data?.type === 'focus-overview') updateOverviewFocus(event.data);
+        };
+        window.addEventListener('hashchange', publishHash);
+      })();
+    </script>
+    <script>
+      (() => {
+        const channel = new BroadcastChannel('neopresent-live-reload');
+        let errorPanel;
+
+        const showError = (message) => {
+          if (!errorPanel) {
+            errorPanel = document.createElement('aside');
+            errorPanel.setAttribute('role', 'alert');
+            Object.assign(errorPanel.style, {
+              background: '#3f0d18',
+              border: '1px solid #fb7185',
+              borderRadius: '.7rem',
+              bottom: '1rem',
+              boxShadow: '0 12px 32px rgba(0,0,0,.32)',
+              color: '#ffe4e6',
+              font: '600 14px/1.45 system-ui, sans-serif',
+              maxWidth: 'min(42rem, calc(100vw - 2rem))',
+              padding: '.8rem 1rem',
+              position: 'fixed',
+              right: '1rem',
+              whiteSpace: 'pre-wrap',
+              zIndex: '20000'
+            });
+            document.body.append(errorPanel);
+          }
+          errorPanel.textContent = `NeoPresent could not reload presentation.md\n${message}`;
+        };
+
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'reload') window.location.reload();
+          if (event.data?.type === 'error')
+            showError(event.data.message || 'Unknown Markdown error.');
+          if (event.data?.type === 'clear-error') errorPanel?.remove();
+        };
+      })();
+    </script>
+    <script src="./src/neo/surfaceWheelGuard.js"></script>
+    <script src="./src/neo/surfaceInteraction.mjs" defer></script>
+    <script src="./node_modules/neo.mjs/src/MicroLoader.mjs" type="module"></script>
+    <script src="./src/neo/pdfRenderer.mjs" type="module"></script>
+    <script src="./src/neo/mermaidRenderer.mjs" type="module"></script>
+    <script src="./src/neo/mathRenderer.mjs" type="module"></script>
+    <script src="./src/neo/pollRenderer.mjs" type="module"></script>
+    <script src="./src/neo/runnableRenderer.mjs" type="module"></script>
+    <script>
+      const presenterControlChannel = new BroadcastChannel('neopresent-presenter-controls');
+      const presenterStateChannel = new BroadcastChannel('neopresent-presenter');
+      const pairedReloadStorageKey = 'neopresent-paired-reload-source';
+      let announceViewerReload = false;
+      let viewerReloadedForPresenter = false;
+      let audienceAwaitingPresenterPreview = false;
+      let audienceAnimationGateTimer;
+      try {
+        const pairedReloadSource = sessionStorage.getItem(pairedReloadStorageKey);
+        if (pairedReloadSource === 'presenter') {
+          sessionStorage.removeItem(pairedReloadStorageKey);
+          viewerReloadedForPresenter = true;
+          document.documentElement.classList.add('neopresent-paired-reload-hold');
+        } else
+          announceViewerReload = performance.getEntriesByType('navigation')[0]?.type === 'reload';
+      } catch {
+        // Paired refresh is optional when browser session storage is unavailable.
+      }
+      const pairedReloadStyle = document.createElement('style');
+      pairedReloadStyle.textContent =
+        '.neopresent-paired-reload-hold [data-neopresent-slide-host], .neopresent-paired-reload-hold [data-neopresent-slide-host] * { animation-play-state: paused !important; }';
+      document.head.append(pairedReloadStyle);
+      const spotlightChannel = new BroadcastChannel('neopresent-spotlight');
+      const spotlightRingChannel = new BroadcastChannel('neopresent-spotlight-ring');
+      let laserPointer;
+      let latestLaserPointer;
+      let blackoutScreen;
+      let spotlightScreen;
+      let spotlightRing;
+      let progressIndicator;
+      const spotlightRingStyle = {
+        ringColor: '#ff3b30',
+        ringVisible: false,
+        ringWidth: 2
+      };
+      let spotlightEnabled = false;
+      let annotationLayer;
+      let annotationCursor;
+      let annotationPaths = [];
+      let activeAnnotationPath;
+      let standaloneAudienceBlanked = false;
+      let standaloneLaserEnabled = false;
+      let standaloneSpotlightEnabled = false;
+      let standaloneAnnotationEnabled = false;
+      let standaloneAnnotationEraserEnabled = false;
+      let standalonePointerPosition = { x: 0.5, y: 0.5 };
+      let presenterLastSeenAt = 0;
+      let audienceSlideIndex = 0;
+      let audienceOverviewActive = false;
+      let lastReadyAudienceSlideIndex = -1;
+      let audienceAspect = '';
+      let filmstripThemeSnapshot;
+      const isDarkThemeColor = (value) => {
+        const text = String(value || '').trim();
+        const hex = text.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
+        const rgb = text.match(
+          /^rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/i
+        );
+        const channels = hex
+          ? hex.slice(1).map((channel) => Number.parseInt(channel, 16))
+          : rgb
+            ? rgb.slice(1).map(Number)
+            : null;
+        if (!channels) return false;
+        const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+        return luminance < 112;
+      };
+      const annotationsBySlide = new Map();
+      const chartTooltipStorageKey = 'neopresent-chart-tooltip';
+      let presenterChartTooltip;
+      let presenterChartMark;
+
+      const setMathAwareText = (host, text) => {
+        host.replaceChildren();
+        const pattern = /\$\$([^$]+)\$\$|\$([^$\n]+)\$/g;
+        let cursor = 0;
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          host.append(document.createTextNode(text.slice(cursor, match.index)));
+          const math = document.createElement('span');
+          math.dataset.katexSource = (match[1] || match[2]).trim();
+          math.dataset.katexDisplay = 'inline';
+          host.append(math);
+          cursor = match.index + match[0].length;
+        }
+        host.append(document.createTextNode(text.slice(cursor)));
+      };
+
+      const surfaceCameras = new WeakMap();
+      let draggedSurface;
+      const surfaceCamera = (surface) => {
+        if (!surfaceCameras.has(surface))
+          surfaceCameras.set(surface, {
+            azimuth: Number(surface.dataset.surfaceAzimuth) || 45,
+            elevation: Number(surface.dataset.surfaceElevation) || 28,
+            zoom: Number(surface.dataset.surfaceZoom) || 1
+          });
+        return surfaceCameras.get(surface);
+      };
+      const surfaceVertices = (value) =>
+        value.split(';').map((vertex) => vertex.split(',').map(Number));
+      const projectSurfacePoint = ([x, y, z], camera) => {
+        const angle = (camera.azimuth * Math.PI) / 180;
+        const tilt = (camera.elevation * Math.PI) / 180;
+        const centeredX = x - 0.5,
+          centeredY = y - 0.5;
+        const horizontal = centeredX * Math.cos(angle) - centeredY * Math.sin(angle);
+        const depth = centeredX * Math.sin(angle) + centeredY * Math.cos(angle);
+        return {
+          depth,
+          x: 350 + horizontal * 430 * camera.zoom,
+          y:
+            320 +
+            depth * Math.sin(tilt) * 260 * camera.zoom -
+            z * Math.cos(tilt) * 270 * camera.zoom
+        };
+      };
+      const redrawSurface = (surface) => {
+        const camera = surfaceCamera(surface);
+        const faces = [...surface.querySelectorAll('[data-neopresent-surface-vertices]')];
+        faces.forEach((face) => {
+          const projected = surfaceVertices(face.dataset.neopresentSurfaceVertices).map((vertex) =>
+            projectSurfacePoint(vertex, camera)
+          );
+          face.setAttribute('points', projected.map((point) => `${point.x},${point.y}`).join(' '));
+          face.dataset.surfaceDepth = String(
+            projected.reduce((sum, point) => sum + point.depth, 0) / projected.length
+          );
+        });
+        const group = surface.querySelector('[data-neopresent-surface-faces]');
+        faces
+          .sort((a, b) => Number(b.dataset.surfaceDepth) - Number(a.dataset.surfaceDepth))
+          .forEach((face) => group.append(face));
+        surface.querySelectorAll('[data-neopresent-surface-edge]').forEach((edge) => {
+          const [start, end] = surfaceVertices(edge.dataset.neopresentSurfaceEdge).map((vertex) =>
+            projectSurfacePoint(vertex, camera)
+          );
+          edge.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
+        });
+        surface.querySelectorAll('[data-neopresent-surface-label]').forEach((label) => {
+          const point = projectSurfacePoint(
+            label.dataset.neopresentSurfaceLabel.split(',').map(Number),
+            camera
+          );
+          label.setAttribute(
+            'transform',
+            `translate(${point.x - Number(label.dataset.surfaceLabelX)} ${point.y - Number(label.dataset.surfaceLabelY)})`
+          );
+        });
+      };
+      const interactiveSurface = (target) => {
+        const surface =
+          target instanceof Element ? target.closest('[data-neopresent-surface]') : null;
+        return surface?.dataset.surfaceInteractive === 'true' ? surface : null;
+      };
+      document.addEventListener('pointerdown', (event) => {
+        const surface = interactiveSurface(event.target);
+        if (!surface) return;
+        event.preventDefault();
+        draggedSurface = {
+          pointerId: event.pointerId,
+          surface,
+          x: event.clientX,
+          y: event.clientY
+        };
+        surface.setPointerCapture?.(event.pointerId);
+        surface.style.cursor = 'grabbing';
+      });
+      document.addEventListener('pointermove', (event) => {
+        if (!draggedSurface || draggedSurface.pointerId !== event.pointerId) return;
+        const camera = surfaceCamera(draggedSurface.surface);
+        camera.azimuth += (event.clientX - draggedSurface.x) * 0.45;
+        camera.elevation = Math.max(
+          -10,
+          Math.min(85, camera.elevation - (event.clientY - draggedSurface.y) * 0.35)
+        );
+        draggedSurface.x = event.clientX;
+        draggedSurface.y = event.clientY;
+        redrawSurface(draggedSurface.surface);
+      });
+      const finishSurfaceDrag = (event) => {
+        if (!draggedSurface || draggedSurface.pointerId !== event.pointerId) return;
+        draggedSurface.surface.style.cursor = 'grab';
+        draggedSurface = null;
+      };
+      document.addEventListener('pointerup', finishSurfaceDrag);
+      document.addEventListener('pointercancel', finishSurfaceDrag);
+      document.addEventListener(
+        'wheel',
+        (event) => {
+          const surface = interactiveSurface(event.target);
+          if (!surface) return;
+          event.preventDefault();
+          const camera = surfaceCamera(surface);
+          camera.zoom = Math.max(
+            0.45,
+            Math.min(2.5, camera.zoom * Math.exp(-event.deltaY * 0.001))
+          );
+          redrawSurface(surface);
+        },
+        { passive: false }
+      );
+      document.addEventListener('dblclick', (event) => {
+        const surface = interactiveSurface(event.target);
+        if (!surface) return;
+        surfaceCameras.delete(surface);
+        redrawSurface(surface);
+      });
+
+      const updatePresenterChartTooltip = ({ text, visible, x, y }) => {
+        if (!presenterChartTooltip) {
+          const style = document.createElement('style');
+          style.textContent =
+            '[data-neopresent-tooltip-active="true"] { filter: drop-shadow(0 0 7px #facc15); opacity: 1 !important; stroke: #facc15 !important; }';
+          document.head.append(style);
+          presenterChartTooltip = document.createElement('div');
+          presenterChartTooltip.setAttribute('aria-live', 'polite');
+          Object.assign(presenterChartTooltip.style, {
+            background: 'rgba(2,6,23,.96)',
+            border: '1px solid var(--np-accent, #38bdf8)',
+            borderRadius: '.4rem',
+            boxShadow: '0 8px 24px rgba(0,0,0,.32)',
+            color: 'var(--np-foreground, #f8fafc)',
+            display: 'none',
+            fontSize: '.9rem',
+            lineHeight: '1.35',
+            maxWidth: 'min(420px, calc(100vw - 24px))',
+            padding: '.5rem .65rem',
+            pointerEvents: 'none',
+            position: 'fixed',
+            whiteSpace: 'normal',
+            zIndex: '20001'
+          });
+          document.body.append(presenterChartTooltip);
+        }
+        if (presenterChartMark?.dataset.neopresentTooltipOriginalRadius) {
+          presenterChartMark.setAttribute(
+            'r',
+            presenterChartMark.dataset.neopresentTooltipOriginalRadius
+          );
+          delete presenterChartMark.dataset.neopresentTooltipOriginalRadius;
+        }
+        presenterChartMark?.removeAttribute('data-neopresent-tooltip-active');
+        presenterChartMark = null;
+        if (!visible || !text) {
+          presenterChartTooltip.style.display = 'none';
+          return;
+        }
+        presenterChartMark =
+          [...document.querySelectorAll('[data-neopresent-tooltip]')].find(
+            (mark) => mark.dataset.neopresentTooltip === text && mark.getClientRects().length
+          ) ?? null;
+        presenterChartMark?.setAttribute('data-neopresent-tooltip-active', 'true');
+        if (presenterChartMark?.tagName?.toLowerCase() === 'circle') {
+          const radius = Number(presenterChartMark.getAttribute('r'));
+          if (Number.isFinite(radius) && radius > 0) {
+            presenterChartMark.dataset.neopresentTooltipOriginalRadius = String(radius);
+            presenterChartMark.setAttribute('r', String(radius * 1.45));
+          }
+        }
+        const bounds = getPresentationBounds() || presenterChartMark?.getBoundingClientRect();
+        if (!bounds) {
+          presenterChartTooltip.style.display = 'none';
+          return;
+        }
+        const left = Number.isFinite(x) ? bounds.left + x * bounds.width + 14 : bounds.left + 14;
+        const top = Number.isFinite(y) ? bounds.top + y * bounds.height + 14 : bounds.top + 14;
+        setMathAwareText(presenterChartTooltip, text);
+        presenterChartTooltip.style.display = 'block';
+        presenterChartTooltip.style.left = `${Math.min(window.innerWidth - presenterChartTooltip.offsetWidth - 8, left)}px`;
+        presenterChartTooltip.style.top = `${Math.min(window.innerHeight - presenterChartTooltip.offsetHeight - 8, top)}px`;
+      };
+
+      const toggleViewerFullscreen = async () => {
+        if (document.fullscreenElement) await document.exitFullscreen?.();
+        else await document.documentElement.requestFullscreen?.();
+      };
+      document.addEventListener('keydown', (event) => {
+        const editable =
+          event.target instanceof HTMLElement &&
+          event.target.matches('input, textarea, [contenteditable="true"]');
+        if (editable || event.key.toLowerCase() !== 'f') return;
+        event.preventDefault();
+        toggleViewerFullscreen();
+      });
+
+      const getPresentationSlide = () => {
+        const slides = [...document.querySelectorAll('[data-neopresent-slide]')];
+        const visible = (element) => {
+          const bounds = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return (
+            bounds.width > 0 &&
+            bounds.height > 0 &&
+            style.visibility !== 'hidden' &&
+            style.display !== 'none'
+          );
+        };
+        return (
+          slides.find(
+            (element) =>
+              visible(element) &&
+              Boolean(element.closest('[data-neopresent-slide-host].neo-active-item'))
+          ) ||
+          slides.find((element) => {
+            if (!visible(element)) return false;
+            const bounds = element.getBoundingClientRect();
+            return (
+              bounds.left <= window.innerWidth / 2 &&
+              bounds.right >= window.innerWidth / 2 &&
+              bounds.top <= window.innerHeight / 2 &&
+              bounds.bottom >= window.innerHeight / 2
+            );
+          }) ||
+          slides.find(visible)
+        );
+      };
+      const getPresentationBounds = () => {
+        const activeSlide = getPresentationSlide();
+        return (
+          activeSlide?.getBoundingClientRect() ??
+          document.querySelector('.neo-viewport')?.getBoundingClientRect()
+        );
+      };
+
+      const updateProgressIndicator = ({ activeIndex, controlsVisible, overview, totalSlides }) => {
+        if (!progressIndicator) {
+          progressIndicator = document.createElement('div');
+          progressIndicator.setAttribute('aria-hidden', 'true');
+          Object.assign(progressIndicator.style, {
+            background: 'linear-gradient(90deg, #818cf8, #38bdf8)',
+            bottom: '0',
+            height: '4px',
+            left: '0',
+            opacity: '.9',
+            pointerEvents: 'none',
+            position: 'fixed',
+            transformOrigin: 'left center',
+            transition: 'bottom 160ms ease-out, transform 240ms ease-out',
+            width: '100%',
+            zIndex: '5'
+          });
+          document.body.append(progressIndicator);
+        }
+        const count = Math.max(1, Number(totalSlides) || 1);
+        const ratio = Math.min(count, (Number(activeIndex) || 0) + 1) / count;
+        progressIndicator.style.bottom = controlsVisible ? '64px' : '0';
+        progressIndicator.style.opacity = overview ? '0' : '.9';
+        progressIndicator.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio))})`;
+      };
+
+      const ensureAnnotationLayer = () => {
+        const activeSlide = getPresentationSlide();
+        if (
+          !annotationLayer ||
+          !annotationLayer.isConnected ||
+          (activeSlide && annotationLayer.parentElement !== activeSlide)
+        ) {
+          annotationLayer?.remove();
+          annotationLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          annotationLayer.setAttribute('aria-hidden', 'true');
+          annotationLayer.setAttribute('viewBox', '0 0 1 1');
+          annotationLayer.setAttribute('preserveAspectRatio', 'none');
+          Object.assign(annotationLayer.style, {
+            inset: '0',
+            pointerEvents: 'none',
+            position: activeSlide ? 'absolute' : 'fixed',
+            height: '100%',
+            width: '100%',
+            zIndex: '9997'
+          });
+          (activeSlide || document.body).append(annotationLayer);
+        }
+        return annotationLayer;
+      };
+      const renderAudienceAnnotations = () => {
+        const layer = ensureAnnotationLayer();
+        layer.replaceChildren();
+        const definitions = document.createElementNS(layer.namespaceURI, 'defs');
+        layer.append(definitions);
+        const appendLine = (path, points, options = {}) => {
+          const line = document.createElementNS(layer.namespaceURI, 'polyline');
+          line.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
+          line.setAttribute('fill', 'none');
+          line.setAttribute('stroke', path.color);
+          line.setAttribute('stroke-linecap', options.linecap ?? 'round');
+          line.setAttribute('stroke-linejoin', 'round');
+          line.setAttribute('stroke-width', String(options.width ?? path.width));
+          if (options.opacity !== undefined)
+            line.setAttribute('stroke-opacity', String(options.opacity));
+          if (options.dash) line.setAttribute('stroke-dasharray', options.dash);
+          layer.append(line);
+          return line;
+        };
+        annotationPaths.forEach((path, pathIndex) => {
+          const stroke = path.stroke || 'pen';
+          const width = Math.max(0.001, Number(path.width) || 0.008);
+          if (stroke === 'chalk') {
+            // A translucent solid under-stroke keeps the writing continuous.
+            // The brighter surface is punched with many deterministic,
+            // sub-stroke-size grains to reproduce chalk deposits and pores.
+            appendLine(path, path.points, { opacity: 0.2, width: width * 0.86 });
+            const maskId = `neopresent-chalk-mask-${pathIndex}`;
+            const mask = document.createElementNS(layer.namespaceURI, 'mask');
+            mask.id = maskId;
+            mask.setAttribute('maskUnits', 'userSpaceOnUse');
+            mask.setAttribute('x', '-0.05');
+            mask.setAttribute('y', '-0.05');
+            mask.setAttribute('width', '1.1');
+            mask.setAttribute('height', '1.1');
+            mask.style.maskType = 'luminance';
+            const maskStroke = document.createElementNS(layer.namespaceURI, 'polyline');
+            maskStroke.setAttribute(
+              'points',
+              path.points.map((point) => `${point.x},${point.y}`).join(' ')
+            );
+            maskStroke.setAttribute('fill', 'none');
+            maskStroke.setAttribute('stroke', '#ffffff');
+            maskStroke.setAttribute('stroke-linecap', 'round');
+            maskStroke.setAttribute('stroke-linejoin', 'round');
+            maskStroke.setAttribute('stroke-width', String(width * 1.08));
+            mask.append(maskStroke);
+            let grainIndex = 0;
+            const grainMarks = [];
+            let totalLength = 0;
+            for (let pointIndex = 1; pointIndex < path.points.length; pointIndex += 1) {
+              totalLength += Math.hypot(
+                path.points[pointIndex].x - path.points[pointIndex - 1].x,
+                path.points[pointIndex].y - path.points[pointIndex - 1].y
+              );
+            }
+            const grainCount = Math.max(1, Math.min(1400, Math.ceil(totalLength / (width * 0.34))));
+            const grainSpacing = totalLength / grainCount;
+            let nextGrainDistance = grainSpacing * 0.5;
+            let traversed = 0;
+            for (let segmentIndex = 1; segmentIndex < path.points.length && grainIndex < grainCount; segmentIndex += 1) {
+              const start = path.points[segmentIndex - 1];
+              const end = path.points[segmentIndex];
+              const dx = end.x - start.x;
+              const dy = end.y - start.y;
+              const length = Math.hypot(dx, dy);
+              if (length <= 0) continue;
+              const normalX = -dy / length;
+              const normalY = dx / length;
+              while (nextGrainDistance <= traversed + length && grainIndex < grainCount) {
+                const progress = (nextGrainDistance - traversed) / length;
+                const phase = (pathIndex + 1) * 2.173 + grainIndex * 1.619;
+                const across = Math.sin(phase * 1.31) * width * 0.4;
+                const along = Math.cos(phase * 2.17) * width * 0.08;
+                const cx = start.x + dx * progress + normalX * across + (dx / length) * along;
+                const cy = start.y + dy * progress + normalY * across + (dy / length) * along;
+                const radius = width * (0.08 + 0.1 * (0.5 + 0.5 * Math.sin(phase * 0.83)));
+                grainMarks.push(`M ${cx - radius} ${cy} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`);
+                grainIndex += 1;
+                nextGrainDistance += grainSpacing;
+              }
+              traversed += length;
+            }
+            const grainTexture = document.createElementNS(layer.namespaceURI, 'path');
+            grainTexture.setAttribute('d', grainMarks.join(' '));
+            grainTexture.setAttribute('fill', '#050505');
+            mask.append(grainTexture);
+            definitions.append(mask);
+            const chalkSurface = appendLine(path, path.points, { opacity: 0.94, width: width * 1.08 });
+            chalkSurface.setAttribute('mask', `url(#${maskId})`);
+          } else if (stroke === 'marker') {
+            appendLine(path, path.points, { opacity: 0.38, width: width * 2.35 });
+          } else if (stroke === 'dashed') {
+            appendLine(path, path.points, {
+              dash: `${width * 4} ${width * 2}`,
+              linecap: 'butt'
+            });
+          } else if (stroke === 'dotted') {
+            appendLine(path, path.points, {
+              dash: `0 ${width * 2.1}`,
+              linecap: 'round'
+            });
+          } else appendLine(path, path.points);
+        });
+      };
+      const eraseAnnotationPaths = (paths, point, radius) =>
+        paths.filter(
+          (path) =>
+            !path.points.some(
+              (candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) <= radius
+            )
+        );
+      const eraseAudienceAnnotationAt = (
+        point,
+        radius = 0.032,
+        slideIndex = audienceSlideIndex
+      ) => {
+        const paths = annotationsBySlide.get(slideIndex) || [];
+        const nextPaths = eraseAnnotationPaths(paths, point, radius);
+        annotationsBySlide.set(slideIndex, nextPaths);
+        if (slideIndex !== audienceSlideIndex) return;
+        annotationPaths = nextPaths;
+        renderAudienceAnnotations();
+      };
+      const clearAudienceAnnotations = (slideIndex) => {
+        const targetSlide = Number.isInteger(slideIndex) ? slideIndex : audienceSlideIndex;
+        annotationsBySlide.set(targetSlide, []);
+        if (targetSlide !== audienceSlideIndex) return;
+        annotationPaths = [];
+        activeAnnotationPath = undefined;
+        if (annotationLayer) annotationLayer.replaceChildren();
+      };
+
+      const updateBlackoutScreen = (visible) => {
+        if (!blackoutScreen) {
+          blackoutScreen = document.createElement('div');
+          blackoutScreen.setAttribute('aria-hidden', 'true');
+          Object.assign(blackoutScreen.style, {
+            background: '#000000',
+            inset: '0',
+            opacity: '0',
+            pointerEvents: 'none',
+            position: 'fixed',
+            transition: 'opacity 160ms ease-out',
+            zIndex: '10000'
+          });
+          document.body.append(blackoutScreen);
+        }
+        blackoutScreen.style.opacity = visible ? '1' : '0';
+      };
+
+      const updateSpotlightScreen = ({
+        x = 0.5,
+        y = 0.5,
+        visible,
+        size = 14,
+        ringColor = spotlightRingStyle.ringColor,
+        ringVisible = spotlightRingStyle.ringVisible,
+        ringWidth = spotlightRingStyle.ringWidth
+      }) => {
+        if (!spotlightScreen) {
+          spotlightScreen = document.createElement('div');
+          spotlightScreen.setAttribute('aria-hidden', 'true');
+          Object.assign(spotlightScreen.style, {
+            bottom: 'auto',
+            left: '0',
+            opacity: '0',
+            pointerEvents: 'none',
+            position: 'fixed',
+            right: 'auto',
+            top: '0',
+            transition: 'opacity 120ms ease-out',
+            zIndex: '9998'
+          });
+          document.body.append(spotlightScreen);
+        }
+        if (!spotlightRing) {
+          spotlightRing = document.createElement('div');
+          spotlightRing.setAttribute('aria-hidden', 'true');
+          Object.assign(spotlightRing.style, {
+            border: '2px solid rgba(255,255,255,.48)',
+            borderRadius: '50%',
+            boxSizing: 'border-box',
+            opacity: '0',
+            pointerEvents: 'none',
+            position: 'fixed',
+            transition: 'opacity 120ms ease-out',
+            zIndex: '9998'
+          });
+          document.body.append(spotlightRing);
+        }
+        let centerX = window.innerWidth * x;
+        let centerY = window.innerHeight * y;
+        const bounds = getPresentationBounds();
+        if (bounds) {
+          spotlightScreen.style.left = `${bounds.left}px`;
+          spotlightScreen.style.top = `${bounds.top}px`;
+          spotlightScreen.style.width = `${bounds.width}px`;
+          spotlightScreen.style.height = `${bounds.height}px`;
+          centerX = bounds.left + x * bounds.width;
+          centerY = bounds.top + y * bounds.height;
+        }
+        const outerRadius = Math.max(
+          12,
+          (Number(size) * Math.min(window.innerWidth, window.innerHeight)) / 100
+        );
+        const innerRadius = outerRadius * 0.64;
+        const localX = centerX - (bounds?.left ?? 0);
+        const localY = centerY - (bounds?.top ?? 0);
+        spotlightScreen.style.background = `radial-gradient(circle ${outerRadius}px at ${localX}px ${localY}px, transparent 0, transparent ${innerRadius}px, rgba(0,0,0,.8) ${outerRadius}px)`;
+        spotlightScreen.style.opacity = visible ? '1' : '0';
+        Object.assign(spotlightRingStyle, {
+          ringColor,
+          ringVisible,
+          ringWidth
+        });
+        spotlightRing.style.border = `${Math.max(1, Number(spotlightRingStyle.ringWidth))}px solid ${spotlightRingStyle.ringColor}`;
+        spotlightRing.style.borderColor = spotlightRingStyle.ringColor;
+        spotlightRing.style.setProperty('border-color', spotlightRingStyle.ringColor, 'important');
+        spotlightRing.style.left = `${centerX - outerRadius}px`;
+        spotlightRing.style.top = `${centerY - outerRadius}px`;
+        spotlightRing.style.width = `${outerRadius * 2}px`;
+        spotlightRing.style.height = `${outerRadius * 2}px`;
+        spotlightRing.style.opacity = visible && spotlightRingStyle.ringVisible ? '1' : '0';
+      };
+      const applySpotlightRingStyle = (style) => {
+        Object.assign(spotlightRingStyle, style);
+        if (!spotlightRing) return;
+        spotlightRing.style.border = `${Math.max(1, Number(spotlightRingStyle.ringWidth))}px solid ${spotlightRingStyle.ringColor}`;
+        spotlightRing.style.borderColor = spotlightRingStyle.ringColor;
+        spotlightRing.style.setProperty('border-color', spotlightRingStyle.ringColor, 'important');
+        spotlightRing.style.opacity =
+          spotlightEnabled && spotlightRingStyle.ringVisible ? '1' : '0';
+      };
+      const loadedLaserFonts = new Set();
+
+      const loadLaserFont = async ({ font, fontData }) => {
+        if (!font || !fontData || loadedLaserFonts.has(font)) return;
+        try {
+          const face = new FontFace(font, `url(${fontData})`);
+          await face.load();
+          document.fonts.add(face);
+          loadedLaserFonts.add(font);
+          if (latestLaserPointer?.font === font) updateLaserPointer(latestLaserPointer);
+        } catch (error) {
+          console.error('NeoPresent could not load the presenter pointer font.', error);
+        }
+      };
+
+      const updateLaserPointer = (pointer) => {
+        latestLaserPointer = pointer;
+        const { x, y, visible } = pointer;
+        if (!laserPointer) {
+          laserPointer = document.createElement('div');
+          laserPointer.setAttribute('aria-hidden', 'true');
+          Object.assign(laserPointer.style, {
+            background: '#ff3b30',
+            border: '2px solid rgba(255,255,255,.9)',
+            borderRadius: '50%',
+            boxShadow: '0 0 8px 3px rgba(255,59,48,.72)',
+            fontFamily: 'system-ui, sans-serif',
+            height: '14px',
+            opacity: '0',
+            pointerEvents: 'none',
+            position: 'fixed',
+            transform: 'translate(-50%, -50%)',
+            transition: 'opacity 80ms linear',
+            width: '14px',
+            zIndex: '9999'
+          });
+          document.body.append(laserPointer);
+        }
+
+        const character = typeof pointer.symbol === 'string' ? pointer.symbol : '';
+        laserPointer.textContent = character;
+        laserPointer.style.fontFamily =
+          typeof pointer.font === 'string' ? pointer.font : 'system-ui, sans-serif';
+        laserPointer.style.setProperty('font-variant-emoji', 'text');
+        Object.assign(
+          laserPointer.style,
+          character
+            ? {
+                background: 'transparent',
+                border: '0',
+                borderRadius: '0',
+                boxShadow: 'none',
+                color: '#ff3b30',
+                fontSize: '1.8rem',
+                height: 'auto',
+                textShadow: '0 0 8px rgba(255,59,48,.72)',
+                width: 'auto'
+              }
+            : {
+                background: '#ff3b30',
+                border: '2px solid rgba(255,255,255,.9)',
+                borderRadius: '50%',
+                boxShadow: '0 0 8px 3px rgba(255,59,48,.72)',
+                color: 'transparent',
+                fontSize: 'initial',
+                height: '14px',
+                textShadow: 'none',
+                width: '14px'
+              }
+        );
+
+        const bounds = getPresentationBounds();
+        if (!visible || !bounds || !Number.isFinite(x) || !Number.isFinite(y)) {
+          laserPointer.style.opacity = '0';
+          return;
+        }
+        laserPointer.style.left = `${bounds.left + x * bounds.width}px`;
+        laserPointer.style.top = `${bounds.top + y * bounds.height}px`;
+        laserPointer.style.opacity = '1';
+      };
+
+      const updateAnnotationCursor = ({
+        x,
+        y,
+        visible,
+        symbol = '✍',
+        color = '#ff3b30',
+        font = 'system-ui, sans-serif'
+      }) => {
+        if (!annotationCursor) {
+          annotationCursor = document.createElement('div');
+          annotationCursor.setAttribute('aria-hidden', 'true');
+          Object.assign(annotationCursor.style, {
+            fontFamily: 'system-ui, sans-serif',
+            fontSize: '3.6rem',
+            opacity: '0',
+            pointerEvents: 'none',
+            position: 'fixed',
+            // User-calibrated visible ✍ pencil-tip anchor: x=6%, y=76%.
+            transform: 'translate(-6%, -76%)',
+            transformOrigin: 'top left',
+            transition: 'opacity 80ms linear',
+            zIndex: '9999'
+          });
+          document.body.append(annotationCursor);
+        }
+        annotationCursor.textContent = String(symbol || '✍').replaceAll('\ufe0f', '') + '\ufe0e';
+        annotationCursor.style.color = color;
+        annotationCursor.style.fontFamily = font || 'system-ui, sans-serif';
+        annotationCursor.style.setProperty('font-variant-emoji', 'text');
+        annotationCursor.style.textShadow = `0 0 8px ${color}`;
+        const bounds = getPresentationBounds();
+        if (!visible || !bounds || !Number.isFinite(x) || !Number.isFinite(y)) {
+          annotationCursor.style.opacity = '0';
+          return;
+        }
+        annotationCursor.style.left = `${bounds.left + x * bounds.width}px`;
+        annotationCursor.style.top = `${bounds.top + y * bounds.height}px`;
+        annotationCursor.style.opacity = '1';
+      };
+
+      const standalonePointerPoint = (event) => {
+        const bounds = getPresentationBounds();
+        if (
+          !bounds ||
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom
+        )
+          return null;
+        return {
+          x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+          y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
+        };
+      };
+
+      const updateStandalonePointer = (event) => {
+        const point = standalonePointerPoint(event);
+        if (!point) {
+          if (standaloneLaserEnabled) updateLaserPointer({ visible: false });
+          if (standaloneSpotlightEnabled)
+            updateSpotlightScreen({
+              ...standalonePointerPosition,
+              visible: false
+            });
+          if (standaloneAnnotationEnabled || standaloneAnnotationEraserEnabled)
+            updateAnnotationCursor({ visible: false });
+          return;
+        }
+        standalonePointerPosition = point;
+        if (standaloneLaserEnabled) updateLaserPointer({ ...point, symbol: '', visible: true });
+        if (standaloneSpotlightEnabled)
+          updateSpotlightScreen({ ...point, size: 14, visible: true });
+        if (standaloneAnnotationEnabled || standaloneAnnotationEraserEnabled)
+          updateAnnotationCursor({
+            ...point,
+            symbol: standaloneAnnotationEraserEnabled ? '⌫' : '✍',
+            color: '#ff3b30',
+            visible: true
+          });
+      };
+
+      let presenterFilmstripScrollRatio = 0;
+      const applyPresenterFilmstripScroll = () => {
+        const filmstrip = document.querySelector('[data-neopresent-filmstrip]');
+        if (!filmstrip) return;
+        const maximum = Math.max(0, filmstrip.scrollWidth - filmstrip.clientWidth);
+        filmstrip.style.scrollBehavior = 'auto';
+        filmstrip.scrollLeft = maximum * presenterFilmstripScrollRatio;
+      };
+      const presenterIsOpen = () => Date.now() - presenterLastSeenAt < 2500;
+      const notePresenterPresence = () => {
+        const wasOpen = presenterIsOpen();
+        presenterLastSeenAt = Date.now();
+        if (wasOpen) return;
+        standaloneAudienceBlanked = false;
+        standaloneLaserEnabled = false;
+        standaloneSpotlightEnabled = false;
+        standaloneAnnotationEnabled = false;
+        standaloneAnnotationEraserEnabled = false;
+        activeAnnotationPath = undefined;
+        updateBlackoutScreen(false);
+        updateLaserPointer({ visible: false });
+        updateAnnotationCursor({ visible: false });
+        spotlightEnabled = false;
+        updateSpotlightScreen({
+          ...standalonePointerPosition,
+          size: 14,
+          visible: false
+        });
+      };
+      const viewerHelpDialog = document.querySelector('#neopresent-viewer-help');
+      const viewerHelpStatus = document.querySelector('#neopresent-viewer-help-status');
+      const viewerHelpDescription = document.querySelector(
+        '#neopresent-viewer-help-description'
+      );
+      const viewerHelpGrid = document.querySelector('#neopresent-viewer-help-grid');
+      const viewerHelpCard = document.querySelector('#neopresent-viewer-help-card');
+      const viewerHelpChannel = new BroadcastChannel('neopresent-viewer-help');
+      let viewerHelpOpen = false;
+      let viewerHelpRefreshTimer;
+      const viewerCommonShortcuts = [
+        ['← / →', 'Previous / next slide or reveal'],
+        ['Home / End', 'First / last slide'],
+        ['O', 'Open or cycle overview modes'],
+        ['Enter / 0', 'Select a focused overview slide / exit overview'],
+        ['N', 'Toggle speaker notes'],
+        ['C', 'Toggle the viewer control bar'],
+        ['P', 'Toggle PDF inspection mode'],
+        ['F', 'Enter or leave fullscreen'],
+        ['H / ?', 'Show or hide this help']
+      ];
+      const viewerStandaloneShortcuts = [
+        ['Space', 'Pause or resume slide animations'],
+        ['T / V', 'Toggle table of contents / filmstrip'],
+        ['L / S', 'Toggle laser / spotlight'],
+        ['A / E', 'Toggle annotation / annotation eraser'],
+        ['B', 'Blank or resume the screen']
+      ];
+      const renderViewerHelp = () => {
+        const connected = presenterIsOpen();
+        viewerHelpStatus.textContent = connected ? 'Presenter connected' : 'Standalone viewer';
+        viewerHelpDescription.textContent = connected
+          ? 'Navigation and viewing shortcuts remain available here. Animation, ink, laser, spotlight, blanking, TOC, and filmstrip controls are owned by the presenter window.'
+          : 'The viewer is controlling the presentation directly, including animation and presentation tools.';
+        const shortcuts = connected
+          ? viewerCommonShortcuts
+          : [...viewerCommonShortcuts, ...viewerStandaloneShortcuts];
+        viewerHelpGrid.replaceChildren(
+          ...shortcuts.flatMap(([key, description]) => {
+            const keyElement = document.createElement('kbd');
+            keyElement.textContent = key;
+            const descriptionElement = document.createElement('span');
+            descriptionElement.textContent = description;
+            return [keyElement, descriptionElement];
+          })
+        );
+      };
+      const setViewerHelpOpen = (open) => {
+        viewerHelpOpen = open;
+        clearInterval(viewerHelpRefreshTimer);
+        if (open) renderViewerHelp();
+        viewerHelpDialog.hidden = !open;
+        viewerHelpDialog.setAttribute('aria-hidden', String(!open));
+        if (open) {
+          viewerHelpCard.focus({ preventScroll: true });
+          viewerHelpRefreshTimer = setInterval(renderViewerHelp, 1000);
+        }
+      };
+      viewerHelpChannel.onmessage = (event) => {
+        if (event.data?.type === 'toggle') setViewerHelpOpen(!viewerHelpOpen);
+      };
+      viewerHelpDialog.addEventListener('click', (event) => {
+        if (event.target === viewerHelpDialog) setViewerHelpOpen(false);
+      });
+      document.addEventListener(
+        'keydown',
+        (event) => {
+          const editable =
+            event.target instanceof HTMLElement &&
+            event.target.closest('input, textarea, [contenteditable="true"]');
+          if (editable || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+          const helpShortcut = event.key === '?' || event.key.toLowerCase() === 'h';
+          if (!helpShortcut && !(event.key === 'Escape' && viewerHelpOpen)) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          setViewerHelpOpen(helpShortcut ? !viewerHelpOpen : false);
+        },
+        true
+      );
+
+      document.addEventListener(
+        'pointermove',
+        (event) => {
+          updateStandalonePointer(event);
+          if (standaloneAnnotationEraserEnabled && event.buttons === 1) {
+            const point = standalonePointerPoint(event);
+            if (point) eraseAudienceAnnotationAt(point);
+            return;
+          }
+          if (!standaloneAnnotationEnabled || !activeAnnotationPath) return;
+          const point = standalonePointerPoint(event);
+          if (!point) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          activeAnnotationPath.points.push(point);
+          renderAudienceAnnotations();
+        },
+        true
+      );
+
+      document.addEventListener(
+        'pointerdown',
+        (event) => {
+          if (
+            (!standaloneAnnotationEnabled && !standaloneAnnotationEraserEnabled) ||
+            event.button !== 0
+          )
+            return;
+          const point = standalonePointerPoint(event);
+          if (!point) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          if (standaloneAnnotationEraserEnabled) {
+            eraseAudienceAnnotationAt(point);
+            return;
+          }
+          activeAnnotationPath = {
+            color: '#ff3b30',
+            points: [point],
+            stroke: 'chalk',
+            width: 0.008
+          };
+          annotationPaths = annotationsBySlide.get(audienceSlideIndex) || [];
+          annotationPaths.push(activeAnnotationPath);
+          annotationsBySlide.set(audienceSlideIndex, annotationPaths);
+          renderAudienceAnnotations();
+        },
+        true
+      );
+
+      const finishStandaloneAnnotation = () => {
+        activeAnnotationPath = undefined;
+      };
+      document.addEventListener('pointerup', finishStandaloneAnnotation, true);
+      document.addEventListener('pointercancel', finishStandaloneAnnotation, true);
+
+      let audienceAnimationsPaused = false;
+      const pausedAudienceAnimations = new Set();
+      const isAudienceSlideAnimation = (animation) => {
+        const target = animation.effect?.target;
+        return target instanceof Element && Boolean(target.closest('[data-neopresent-slide-host]'));
+      };
+      const pauseAudienceAnimations = () => {
+        document.getAnimations().forEach((animation) => {
+          if (!isAudienceSlideAnimation(animation)) return;
+          if (!['pending', 'running'].includes(animation.playState)) return;
+          animation.pause();
+          pausedAudienceAnimations.add(animation);
+        });
+      };
+      const keepAudienceAnimationsPaused = (framesRemaining = 8) => {
+        pauseAudienceAnimations();
+        if (!audienceAnimationsPaused || framesRemaining <= 0) return;
+        requestAnimationFrame(() => keepAudienceAnimationsPaused(framesRemaining - 1));
+      };
+      const setAudienceAnimationsPaused = (paused) => {
+        if (audienceAnimationsPaused === paused) return;
+        audienceAnimationsPaused = paused;
+        if (paused) {
+          keepAudienceAnimationsPaused();
+          return;
+        }
+        pausedAudienceAnimations.forEach((animation) => {
+          if (animation.playState === 'paused') animation.play();
+        });
+        pausedAudienceAnimations.clear();
+      };
+      const toggleAudienceAnimations = () => setAudienceAnimationsPaused(!audienceAnimationsPaused);
+      new MutationObserver(() => {
+        if (audienceAnimationsPaused) requestAnimationFrame(() => keepAudienceAnimationsPaused());
+      }).observe(document.documentElement, {
+        attributeFilter: ['class', 'style'],
+        attributes: true,
+        childList: true,
+        subtree: true
+      });
+
+      document.addEventListener(
+        'keydown',
+        (event) => {
+          const editable =
+            event.target instanceof HTMLElement &&
+            event.target.closest('input, textarea, [contenteditable="true"]');
+          if (editable || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+          const key = event.key.toLowerCase();
+          if (presenterIsOpen()) return;
+          if (![' ', 'a', 'b', 'e', 'l', 's'].includes(key)) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          if (key === ' ') {
+            toggleAudienceAnimations();
+            return;
+          }
+          if (key === 'b') {
+            standaloneAudienceBlanked = !standaloneAudienceBlanked;
+            updateBlackoutScreen(standaloneAudienceBlanked);
+          }
+          if (key === 'l') {
+            standaloneLaserEnabled = !standaloneLaserEnabled;
+            if (standaloneLaserEnabled) {
+              standaloneAnnotationEnabled = false;
+              standaloneAnnotationEraserEnabled = false;
+              activeAnnotationPath = undefined;
+            }
+            updateLaserPointer({
+              ...standalonePointerPosition,
+              symbol: '',
+              visible: standaloneLaserEnabled
+            });
+          }
+          if (key === 's') {
+            standaloneSpotlightEnabled = !standaloneSpotlightEnabled;
+            spotlightEnabled = standaloneSpotlightEnabled;
+            updateSpotlightScreen({
+              ...standalonePointerPosition,
+              size: 14,
+              visible: standaloneSpotlightEnabled
+            });
+          }
+          if (key === 'a') {
+            standaloneAnnotationEnabled = !standaloneAnnotationEnabled;
+            activeAnnotationPath = undefined;
+            if (standaloneAnnotationEnabled && standaloneLaserEnabled) {
+              standaloneLaserEnabled = false;
+              updateLaserPointer({ visible: false });
+            }
+            updateAnnotationCursor({
+              ...standalonePointerPosition,
+              symbol: standaloneAnnotationEraserEnabled ? '⌫' : '✍',
+              color: standaloneAnnotationEraserEnabled ? '#f8fafc' : '#ff3b30',
+              visible: standaloneAnnotationEnabled || standaloneAnnotationEraserEnabled
+            });
+          }
+          if (key === 'e') {
+            standaloneAnnotationEraserEnabled = !standaloneAnnotationEraserEnabled;
+            activeAnnotationPath = undefined;
+            if (standaloneAnnotationEraserEnabled && standaloneLaserEnabled) {
+              standaloneLaserEnabled = false;
+              updateLaserPointer({ visible: false });
+            }
+            updateAnnotationCursor({
+              ...standalonePointerPosition,
+              symbol: standaloneAnnotationEraserEnabled ? '⌫' : '✍',
+              color: standaloneAnnotationEraserEnabled ? '#f8fafc' : '#ff3b30',
+              visible: standaloneAnnotationEnabled || standaloneAnnotationEraserEnabled
+            });
+          }
+        },
+        true
+      );
+
+      const applyViewerTocFocus = (index) => {
+        const focusedIndex = index == null ? Number.NaN : Number(index);
+        document
+          .querySelectorAll(".neopresent-toc-panel a[href^='#slide=']")
+          .forEach((entry) =>
+            entry.classList.toggle(
+              'neopresent-toc-focus',
+              Number.isInteger(focusedIndex) &&
+                entry.getAttribute('href') === `#slide=${focusedIndex + 1}`
+            )
+          );
+      };
+      const standaloneTocEntry = (target) =>
+        target instanceof Element
+          ? target.closest(".neopresent-toc-panel a[href^='#slide=']")
+          : null;
+      document.addEventListener(
+        'mouseover',
+        (event) => {
+          if (presenterIsOpen()) return;
+          const entry = standaloneTocEntry(event.target);
+          if (!entry || entry === standaloneTocEntry(event.relatedTarget)) return;
+          const index = Number(entry.getAttribute('href')?.match(/#slide=(\d+)/)?.[1]) - 1;
+          applyViewerTocFocus(index);
+        },
+        true
+      );
+      document.addEventListener(
+        'mouseout',
+        (event) => {
+          if (presenterIsOpen()) return;
+          const entry = standaloneTocEntry(event.target);
+          if (!entry || entry === standaloneTocEntry(event.relatedTarget)) return;
+          applyViewerTocFocus(null);
+        },
+        true
+      );
+
+      const publishPdfControlState = () => {
+        const root = document.querySelector('[data-neopresent-pdf-inspection="true"]');
+        if (!root) {
+          presenterStateChannel.postMessage({ type: 'pdf-control-state', active: false });
+          return;
+        }
+        const hosts = [...root.querySelectorAll('[data-pdf-viewer-host="true"]')];
+        const rootTop = root.getBoundingClientRect().top;
+        const pdfIndex = hosts.reduce(
+          (best, host, index) => {
+            const distance = Math.abs(host.getBoundingClientRect().top - rootTop);
+            return distance < best.distance ? { distance, index } : best;
+          },
+          { distance: Number.POSITIVE_INFINITY, index: 0 }
+        ).index;
+        presenterStateChannel.postMessage({
+          type: 'pdf-control-state',
+          active: true,
+          pdfCount: hosts.length,
+          pdfIndex,
+          zoom: Number(root.dataset.neopresentPdfZoom || 1)
+        });
+      };
+      const applyPdfControl = (action) => {
+        const root = document.querySelector('[data-neopresent-pdf-inspection="true"]');
+        if (!root) {
+          publishPdfControlState();
+          return;
+        }
+        const hosts = [...root.querySelectorAll('[data-pdf-viewer-host="true"]')];
+        const currentZoom = Number(root.dataset.neopresentPdfZoom || 1);
+        if (action === 'zoom-in' || action === 'zoom-out' || action === 'fit') {
+          const zoom =
+            action === 'fit'
+              ? 1
+              : Math.max(
+                  0.75,
+                  Math.min(3, currentZoom + (action === 'zoom-in' ? 0.25 : -0.25))
+                );
+          root.dataset.neopresentPdfZoom = String(zoom);
+          hosts.forEach((host) => {
+            host.dataset.pdfViewerZoom = String(zoom);
+            host.style.width = `${zoom * 100}%`;
+            delete host.dataset.pdfViewerObservedWidth;
+          });
+          if (action === 'fit') root.scrollTo({ behavior: 'smooth', left: 0, top: 0 });
+        } else if (action === 'scroll-up' || action === 'scroll-down') {
+          root.scrollBy({
+            behavior: 'smooth',
+            top: root.clientHeight * (action === 'scroll-down' ? 0.72 : -0.72)
+          });
+        } else if (action === 'scroll-left' || action === 'scroll-right') {
+          root.scrollBy({
+            behavior: 'smooth',
+            left: root.clientWidth * (action === 'scroll-right' ? 0.42 : -0.42)
+          });
+        } else if (action === 'previous-pdf' || action === 'next-pdf') {
+          if (hosts.length > 0) {
+            const rootTop = root.getBoundingClientRect().top;
+            const currentIndex = hosts.reduce(
+              (best, host, index) => {
+                const distance = Math.abs(host.getBoundingClientRect().top - rootTop);
+                return distance < best.distance ? { distance, index } : best;
+              },
+              { distance: Number.POSITIVE_INFINITY, index: 0 }
+            ).index;
+            const nextIndex = Math.max(
+              0,
+              Math.min(hosts.length - 1, currentIndex + (action === 'next-pdf' ? 1 : -1))
+            );
+            const targetTop =
+              root.scrollTop +
+              hosts[nextIndex].getBoundingClientRect().top -
+              root.getBoundingClientRect().top;
+            root.scrollTo({ behavior: 'smooth', left: root.scrollLeft, top: targetTop });
+          }
+        }
+        requestAnimationFrame(() => requestAnimationFrame(publishPdfControlState));
+        setTimeout(publishPdfControlState, 420);
+      };
+
+      presenterStateChannel.onmessage = (event) => {
+        if (event.data?.type === 'pdf-control') {
+          if (event.data.action === 'state') publishPdfControlState();
+          else applyPdfControl(event.data.action);
+          return;
+        }
+        if (event.data?.type === 'presenter-preview-ready') {
+          if (audienceAwaitingPresenterPreview) {
+            audienceAwaitingPresenterPreview = false;
+            clearTimeout(audienceAnimationGateTimer);
+            document.documentElement.classList.remove('neopresent-paired-reload-hold');
+          }
+          return;
+        }
+        if (event.data?.type === 'presenter-window-refreshed') {
+          try {
+            sessionStorage.setItem(pairedReloadStorageKey, 'presenter');
+            window.location.reload();
+          } catch {
+            // Do not interrupt a presentation if browser storage is unavailable.
+          }
+          return;
+        }
+        if (event.data?.type === 'toc-focus') {
+          applyViewerTocFocus(event.data.index);
+          return;
+        }
+        if (event.data?.type === 'filmstrip-theme-swap') {
+          if (event.data.phase === 'start') {
+            document
+              .querySelectorAll('.neopresent-filmstrip-snapshot')
+              .forEach((snapshot) => snapshot.remove());
+            const panel = document.querySelector('.neopresent-filmstrip-panel');
+            if (panel) {
+              filmstripThemeSnapshot = panel.cloneNode(true);
+              filmstripThemeSnapshot.classList.remove('neopresent-filmstrip-panel');
+              filmstripThemeSnapshot.classList.add('neopresent-filmstrip-snapshot');
+              [
+                filmstripThemeSnapshot,
+                ...filmstripThemeSnapshot.querySelectorAll('[id], [data-neo-id]')
+              ].forEach((node) => {
+                node.removeAttribute('id');
+                node.removeAttribute('data-neo-id');
+              });
+              document.body.append(filmstripThemeSnapshot);
+              const sourceScroller = panel.querySelector('[data-neopresent-filmstrip]');
+              const snapshotScroller = filmstripThemeSnapshot.querySelector(
+                '[data-neopresent-filmstrip]'
+              );
+              if (sourceScroller && snapshotScroller) {
+                snapshotScroller.scrollLeft = sourceScroller.scrollLeft;
+              }
+            }
+          } else if (event.data.phase === 'end' && filmstripThemeSnapshot) {
+            const snapshot = filmstripThemeSnapshot;
+            requestAnimationFrame(() => {
+              snapshot.style.opacity = '0';
+              setTimeout(() => {
+                snapshot.remove();
+                if (filmstripThemeSnapshot === snapshot) {
+                  filmstripThemeSnapshot = undefined;
+                }
+              }, 160);
+            });
+          }
+          return;
+        }
+        if (event.data?.type === 'request-state') {
+          notePresenterPresence();
+          if (event.data.refresh === true) {
+            // A freshly reloaded presenter did not receive the previous one-time
+            // ready signal. Re-send it once; ordinary status polling must not
+            // restart or seek the live animations.
+            lastReadyAudienceSlideIndex = -1;
+            scheduleUniformSlideScale();
+          }
+        }
+        if (event.data?.type === 'filmstrip-scroll') {
+          presenterFilmstripScrollRatio = Math.max(0, Math.min(1, Number(event.data.ratio) || 0));
+          applyPresenterFilmstripScroll();
+        }
+        if (event.data?.type === 'laser-font') loadLaserFont(event.data);
+        if (event.data?.type === 'laser') {
+          updateLaserPointer(event.data);
+        }
+        if (event.data?.type === 'annotation-cursor') updateAnnotationCursor(event.data);
+        if (event.data?.type === 'chart-tooltip') updatePresenterChartTooltip(event.data);
+        if (event.data?.type === 'blackout') updateBlackoutScreen(event.data.visible);
+        if (event.data?.type === 'spotlight') {
+          spotlightEnabled = Boolean(event.data.visible);
+          updateSpotlightScreen({ ...event.data, visible: spotlightEnabled });
+        }
+        if (event.data?.type === 'spotlight-ring-style') applySpotlightRingStyle(event.data);
+        if (event.data?.type === 'state' && Number.isInteger(event.data.activeIndex)) {
+          const wasAudienceOverview = audienceOverviewActive;
+          audienceOverviewActive = event.data.overview === true;
+          const exitedAudienceOverview = wasAudienceOverview && !audienceOverviewActive;
+          const themeProperties = {
+            accent: '--np-accent',
+            background: '--np-background',
+            border: '--np-border',
+            foreground: '--np-foreground',
+            muted: '--np-muted',
+            panel: '--np-panel',
+            surface: '--np-surface'
+          };
+          Object.entries(themeProperties).forEach(([key, property]) => {
+            const value = event.data.theme?.[key];
+            if (typeof value === 'string')
+              document.documentElement.style.setProperty(property, value);
+          });
+          const panelColor = String(event.data.theme?.panel || '#ffffff');
+          const surfaceColor = String(event.data.theme?.surface || panelColor);
+          const contrastColor = isDarkThemeColor(panelColor) ? 'white' : 'black';
+          document.documentElement.style.setProperty(
+            '--np-controls-panel',
+            `color-mix(in srgb, ${panelColor} 86%, ${contrastColor})`
+          );
+          document.documentElement.style.setProperty(
+            '--np-controls-surface',
+            `color-mix(in srgb, ${surfaceColor} 90%, ${contrastColor})`
+          );
+          audienceAspect = String(event.data.liveAspect || event.data.currentSlide?.aspect || '');
+          document.documentElement.classList.toggle(
+            'neopresent-filmstrip-open',
+            Boolean(event.data.filmstripOpen)
+          );
+          document.documentElement.classList.toggle(
+            'neopresent-toc-open',
+            Boolean(event.data.tocOpen)
+          );
+          document.querySelectorAll(".neopresent-toc-panel a[href^='#slide=']").forEach((entry) => {
+            entry.classList.toggle(
+              'neopresent-toc-current',
+              entry.getAttribute('href') === `#slide=${event.data.activeIndex + 1}`
+            );
+          });
+          updateProgressIndicator(event.data);
+          if (audienceSlideIndex !== event.data.activeIndex || exitedAudienceOverview) {
+            if (audienceSlideIndex !== event.data.activeIndex) setAudienceAnimationsPaused(false);
+            audienceSlideIndex = event.data.activeIndex;
+            if (exitedAudienceOverview) {
+              // The audience slide is freshly mounted when overview closes.
+              // Hold it at its first frame until the presenter preview has
+              // been rebuilt from the same state.
+              audienceAwaitingPresenterPreview = true;
+              document.documentElement.classList.add('neopresent-paired-reload-hold');
+              clearTimeout(audienceAnimationGateTimer);
+              audienceAnimationGateTimer = setTimeout(() => {
+                if (!audienceAwaitingPresenterPreview) return;
+                audienceAwaitingPresenterPreview = false;
+                document.documentElement.classList.remove('neopresent-paired-reload-hold');
+              }, 180);
+              lastReadyAudienceSlideIndex = -1;
+            }
+            scheduleUniformSlideScale();
+            annotationPaths = annotationsBySlide.get(audienceSlideIndex) || [];
+            activeAnnotationPath = undefined;
+            renderAudienceAnnotations();
+          }
+        }
+        if (event.data?.type === 'annotation-clear')
+          clearAudienceAnnotations(event.data.slideIndex);
+        if (event.data?.type === 'annotation-erase' && event.data.point)
+          eraseAudienceAnnotationAt(event.data.point, event.data.radius, event.data.slideIndex);
+        if (event.data?.type === 'annotation-undo') {
+          const slideIndex = Number.isInteger(event.data.slideIndex)
+            ? event.data.slideIndex
+            : audienceSlideIndex;
+          const paths = annotationsBySlide.get(slideIndex) || [];
+          paths.pop();
+          annotationsBySlide.set(slideIndex, paths);
+          if (slideIndex === audienceSlideIndex) {
+            annotationPaths = paths;
+            renderAudienceAnnotations();
+          }
+        }
+        if (event.data?.type === 'annotation-redo' && event.data.path) {
+          const slideIndex = Number.isInteger(event.data.slideIndex)
+            ? event.data.slideIndex
+            : audienceSlideIndex;
+          const paths = annotationsBySlide.get(slideIndex) || [];
+          paths.push(event.data.path);
+          annotationsBySlide.set(slideIndex, paths);
+          if (slideIndex === audienceSlideIndex) {
+            annotationPaths = paths;
+            renderAudienceAnnotations();
+          }
+        }
+        if (event.data?.type === 'annotation-start') {
+          const slideIndex = Number.isInteger(event.data.slideIndex)
+            ? event.data.slideIndex
+            : audienceSlideIndex;
+          activeAnnotationPath = {
+            color: event.data.color || '#ff3b30',
+            points: [event.data.point],
+            stroke: event.data.stroke || 'chalk',
+            width: Number.isFinite(event.data.width) ? event.data.width : 0.008
+          };
+          const paths = annotationsBySlide.get(slideIndex) || [];
+          paths.push(activeAnnotationPath);
+          annotationsBySlide.set(slideIndex, paths);
+          if (slideIndex === audienceSlideIndex) {
+            annotationPaths = paths;
+            renderAudienceAnnotations();
+          }
+        }
+        if (event.data?.type === 'annotation-point' && activeAnnotationPath) {
+          activeAnnotationPath.points.push(event.data.point);
+          renderAudienceAnnotations();
+        }
+      };
+      spotlightChannel.onmessage = (event) => {
+        spotlightEnabled = Boolean(event.data?.visible);
+        updateSpotlightScreen({ ...event.data, visible: spotlightEnabled });
+        if (event.data?.laser) updateLaserPointer({ ...event.data, visible: spotlightEnabled });
+      };
+      spotlightRingChannel.onmessage = (event) => {
+        applySpotlightRingStyle(event.data);
+      };
+      presenterStateChannel.postMessage({ type: 'request-laser-font' });
+      // Neo routes keyboard events through the focused component. A presentation
+      // should still navigate when the browser body has focus (the normal case
+      // immediately after loading), so forward presentation keys to the viewport.
+      const presentationKeys = new Set([
+        'ArrowRight',
+        'ArrowDown',
+        'PageDown',
+        'ArrowLeft',
+        'ArrowUp',
+        'PageUp',
+        'Home',
+        'End',
+        'Enter',
+        'Escape',
+        '0',
+        'n',
+        'N',
+        't',
+        'T',
+        'v',
+        'V',
+        'c',
+        'C',
+        'o',
+        'O',
+        'p',
+        'P'
+      ]);
+
+      document.addEventListener(
+        'keydown',
+        (event) => {
+          const target = event.target;
+          const isEditable =
+            target instanceof HTMLElement &&
+            target.closest('input, textarea, [contenteditable="true"]');
+          const viewport = document.querySelector('.neo-viewport');
+
+          if (isEditable) {
+            return;
+          }
+
+          if (event.key === 'Escape' && document.fullscreenElement && audienceOverviewActive) {
+            // Browsers reserve Escape to leave fullscreen even when the event
+            // is cancelled. Restore fullscreen after Neo closes the overview.
+            restoreFullscreenAfterOverviewEscape = true;
+          }
+
+          const panelShortcut = ['t', 'v'].includes(event.key.toLowerCase());
+          if (panelShortcut && event.isTrusted && presenterIsOpen()) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+          }
+
+          if (!presentationKeys.has(event.key) || !viewport) return;
+
+          // Suppress browser defaults even when Neo already owns the focused
+          // element. The component key handler below will still receive it.
+          if (viewport.contains(target)) {
+            event.preventDefault();
+            return;
+          }
+
+          event.preventDefault();
+          viewport.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              bubbles: true,
+              cancelable: true,
+              key: event.key
+            })
+          );
+        },
+        { capture: true }
+      );
+
+      // Overview previews are created by Neo in its worker. Hover effects are
+      // deliberately applied here in the browser, so they remain fluid and do
+      // not require a worker re-render for every pointer movement.
+      const getOverviewCard = (target) =>
+        target instanceof Element ? target.closest('[data-neopresent-overview-card]') : null;
+
+      document.addEventListener(
+        'pointerover',
+        (event) => {
+          const card = getOverviewCard(event.target);
+          const from = getOverviewCard(event.relatedTarget);
+          if (!card || card === from) return;
+
+          card.dataset.neopresentBaseTransform = card.style.transform;
+          card.dataset.neopresentBaseShadow = card.style.boxShadow;
+          const overview = card.closest('[data-neopresent-overview]');
+          if (
+            overview?.dataset.neopresentOverview === 'gallery' ||
+            overview?.dataset.neopresentOverview === 'helix'
+          )
+            return;
+          card.style.transform = `${card.style.transform || ''} translateY(-7px) scale(1.035) rotate(-.35deg)`;
+          card.style.boxShadow = '0 20px 42px rgba(0,0,0,.42), 0 0 0 3px rgba(125,211,252,.72)';
+          card.style.zIndex = '2';
+        },
+        true
+      );
+
+      document.addEventListener(
+        'pointerout',
+        (event) => {
+          const card = getOverviewCard(event.target);
+          const to = getOverviewCard(event.relatedTarget);
+          if (!card || card === to) return;
+          if (
+            card.closest('[data-neopresent-overview="gallery"], [data-neopresent-overview="helix"]')
+          )
+            return;
+
+          card.style.transform = card.dataset.neopresentBaseTransform || '';
+          card.style.boxShadow = card.dataset.neopresentBaseShadow || '';
+          card.style.zIndex = '';
+        },
+        true
+      );
+
+      const galleryAnimationSettings = {
+        cameraReturnDuration: 5000,
+        cameraTurnDuration: 330,
+        cameraEasing: 'cubic-bezier(.2,.6,.6,.9)'
+      };
+      const galleryGestureState = { x: 0, z: 0 };
+      const applyGalleryGesture = (camera) => {
+        if (!camera) return;
+        camera.style.translate = `${galleryGestureState.x}px 0 ${galleryGestureState.z}px`;
+        camera.style.scale = '';
+      };
+      document.addEventListener(
+        'wheel',
+        (event) => {
+          if (event.ctrlKey) return;
+          const gallery =
+            event.target instanceof Element
+              ? event.target.closest('[data-neopresent-overview="gallery"]')
+              : null;
+          if (!gallery) return;
+          const camera = gallery.querySelector('[data-neopresent-gallery-camera]');
+          if (!camera) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          galleryGestureState.x = Math.max(
+            -5000,
+            Math.min(5000, galleryGestureState.x - event.deltaX * 10)
+          );
+          galleryGestureState.z = Math.max(
+            -1600,
+            Math.min(420, galleryGestureState.z + event.deltaY * 10)
+          );
+          applyGalleryGesture(camera);
+        },
+        { capture: true, passive: false }
+      );
+      const helixGestureState = { rotation: 0, z: 0 };
+      const applyHelixGesture = (group) => {
+        if (!group) return;
+        group.style.transform = `translateZ(${helixGestureState.z}px) rotateY(${helixGestureState.rotation}deg)`;
+      };
+      document.addEventListener(
+        'wheel',
+        (event) => {
+          if (event.ctrlKey) return;
+          const helix =
+            event.target instanceof Element
+              ? event.target.closest('[data-neopresent-overview="helix"]')
+              : null;
+          if (!helix) return;
+          const group = helix.querySelector('[data-neopresent-helix-group]');
+          if (!group) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          helixGestureState.rotation += event.deltaX * 5;
+          helixGestureState.z += event.deltaY * 50;
+          applyHelixGesture(group);
+        },
+        { capture: true, passive: false }
+      );
+      const playGalleryCameraRotation = (camera) => {
+        applyGalleryGesture(camera);
+        const key = camera.dataset.neopresentGalleryCamera;
+        const direction = Number(camera.dataset.neopresentGalleryRotation);
+        if (!key || camera.dataset.neopresentGalleryPlayed === key || direction === 0) return;
+        camera.dataset.neopresentGalleryPlayed = key;
+        const currentTransform = getComputedStyle(camera).transform;
+        camera.getAnimations().forEach((animation) => animation.cancel());
+        const turn = camera.animate(
+          [
+            { transform: currentTransform === 'none' ? 'rotateY(0deg)' : currentTransform },
+            { transform: `rotateY(${direction * 45}deg)` }
+          ],
+          {
+            duration: galleryAnimationSettings.cameraTurnDuration,
+            easing: galleryAnimationSettings.cameraEasing,
+            fill: 'forwards'
+          }
+        );
+        turn.finished
+          .then(() => {
+            if (!camera.isConnected || camera.dataset.neopresentGalleryPlayed !== key) return;
+            camera.animate(
+              [{ transform: `rotateY(${direction * 45}deg)` }, { transform: 'rotateY(0deg)' }],
+              {
+                duration: galleryAnimationSettings.cameraReturnDuration,
+                easing: galleryAnimationSettings.cameraEasing,
+                fill: 'forwards'
+              }
+            );
+          })
+          .catch(() => {});
+      };
+      const galleryCameraObserver = new MutationObserver((mutations) => {
+        const galleryChanged = mutations.some((mutation) => {
+          if (
+            mutation.type === 'attributes' &&
+            mutation.target instanceof Element &&
+            mutation.target.matches('[data-neopresent-gallery-camera]')
+          )
+            return true;
+          return [...mutation.addedNodes].some(
+            (node) =>
+              node instanceof Element &&
+              (node.matches('[data-neopresent-gallery-camera]') ||
+                node.querySelector('[data-neopresent-gallery-camera]'))
+          );
+        });
+        const helixChanged = mutations.some((mutation) => {
+          if (
+            mutation.type === 'attributes' &&
+            mutation.target instanceof Element &&
+            mutation.target.matches('[data-neopresent-helix-group]')
+          )
+            return true;
+          return [...mutation.addedNodes].some(
+            (node) =>
+              node instanceof Element &&
+              (node.matches('[data-neopresent-helix-group]') ||
+                node.querySelector('[data-neopresent-helix-group]'))
+          );
+        });
+        if (galleryChanged)
+          document
+            .querySelectorAll('[data-neopresent-gallery-camera]')
+            .forEach(playGalleryCameraRotation);
+        if (helixChanged)
+          document.querySelectorAll('[data-neopresent-helix-group]').forEach(applyHelixGesture);
+      });
+      galleryCameraObserver.observe(document.body, {
+        attributeFilter: [
+          'data-neopresent-gallery-camera',
+          'data-neopresent-gallery-rotation',
+          'data-neopresent-helix-group'
+        ],
+        attributes: true,
+        childList: true,
+        subtree: true
+      });
+
+      // SVG <title> elements are not consistently readable on touchpads and
+      // may be delayed by the browser. NeoPresent data marks provide their
+      // values through this immediate, pointer-following tooltip instead.
+      let chartTooltip;
+      const getChartMark = (target) =>
+        target instanceof Element ? target.closest('[data-neopresent-tooltip]') : null;
+      const positionChartTooltip = (event) => {
+        if (!chartTooltip) return;
+        chartTooltip.style.left = `${event.clientX + 10}px`;
+        chartTooltip.style.top = `${event.clientY - 10}px`;
+      };
+      const emphasizeChartMark = (mark) => {
+        const chart = mark.closest('svg');
+        const isSurface = Boolean(mark.closest('[data-neopresent-surface]'));
+        const isBar = mark.localName === 'rect' || mark.dataset.neopresentMarkKind === 'bar';
+        const isBox = mark.dataset.neopresentMarkKind === 'box';
+        mark.dataset.neopresentMarkTransform = mark.style.transform;
+        mark.dataset.neopresentMarkFilter = mark.style.filter;
+        Object.assign(mark.style, {
+          cursor: 'pointer',
+          filter: 'drop-shadow(0 0 7px rgba(250,204,21,.95))',
+          // Bars expand from their baseline. Points use a larger, immediate
+          // magnification: informative without a distracting fly-in/out.
+          transform: isSurface
+            ? 'none'
+            : isBar
+              ? 'scale(1.035, 1.08)'
+              : isBox
+                ? 'scale(1.045)'
+                : 'scale(1.5)',
+          transformBox: 'fill-box',
+          transformOrigin: isBar ? 'center bottom' : 'center',
+          transition:
+            isBar || isBox
+              ? 'transform 100ms ease-out, filter 100ms ease-out'
+              : 'filter 80ms ease-out'
+        });
+        if (!chart) return;
+        chart.dataset.neopresentChartTransform = chart.style.transform;
+        Object.assign(chart.style, {
+          filter: 'drop-shadow(0 8px 12px rgba(0,0,0,.24))',
+          transformOrigin: 'center',
+          transition: 'filter 140ms ease-out'
+        });
+      };
+      const restoreChartMark = (mark) => {
+        const chart = mark.closest('svg');
+        mark.style.cursor = '';
+        mark.style.filter = mark.dataset.neopresentMarkFilter || '';
+        mark.style.transform = mark.dataset.neopresentMarkTransform || '';
+        mark.style.transformBox = '';
+        mark.style.transformOrigin = '';
+        if (!chart) return;
+        chart.style.filter = '';
+        chart.style.transform = chart.dataset.neopresentChartTransform || '';
+        chart.style.transformOrigin = '';
+      };
+
+      document.addEventListener(
+        'pointerover',
+        (event) => {
+          const mark = getChartMark(event.target);
+          const from = getChartMark(event.relatedTarget);
+          if (!mark || mark === from) return;
+          chartTooltip ??= document.createElement('div');
+          Object.assign(chartTooltip.style, {
+            background: 'rgba(8,15,31,.94)',
+            border: '1px solid rgba(148,163,184,.8)',
+            borderRadius: '.35rem',
+            boxShadow: '0 6px 20px rgba(0,0,0,.35)',
+            color: '#f8fafc',
+            font: '600 .8rem/1.3 system-ui,sans-serif',
+            maxWidth: '18rem',
+            padding: '.35rem .5rem',
+            pointerEvents: 'none',
+            position: 'fixed',
+            whiteSpace: 'pre-wrap',
+            zIndex: '10000'
+          });
+          setMathAwareText(chartTooltip, mark.getAttribute('data-neopresent-tooltip') || '');
+          document.body.append(chartTooltip);
+          positionChartTooltip(event);
+          emphasizeChartMark(mark);
+        },
+        true
+      );
+
+      document.addEventListener(
+        'pointermove',
+        (event) => {
+          if (getChartMark(event.target)) positionChartTooltip(event);
+        },
+        true
+      );
+
+      document.addEventListener(
+        'pointerout',
+        (event) => {
+          const mark = getChartMark(event.target);
+          const to = getChartMark(event.relatedTarget);
+          if (!mark || mark === to) return;
+          chartTooltip?.remove();
+          restoreChartMark(mark);
+        },
+        true
+      );
+
+      // Touch screens use a deliberate horizontal swipe to navigate. Vertical
+      // movement is left untouched for scrolling an overview or embedded data.
+      let touchStart;
+      document.addEventListener(
+        'touchstart',
+        (event) => {
+          const touch = event.touches[0];
+          if (!touch || event.touches.length !== 1) return;
+          touchStart = {
+            x: touch.clientX,
+            y: touch.clientY,
+            filmstrip:
+              event.target instanceof Element &&
+              event.target.closest('[data-neopresent-filmstrip]'),
+            lastX: touch.clientX
+          };
+        },
+        { capture: true, passive: true }
+      );
+
+      document.addEventListener(
+        'touchmove',
+        (event) => {
+          const touch = event.touches[0];
+          if (!touchStart?.filmstrip || !touch || event.touches.length !== 1) return;
+          event.preventDefault();
+          touchStart.filmstrip.style.scrollBehavior = 'auto';
+          touchStart.filmstrip.scrollLeft += (touchStart.lastX - touch.clientX) * 1.8;
+          touchStart.lastX = touch.clientX;
+        },
+        { capture: true, passive: false }
+      );
+
+      document.addEventListener(
+        'touchend',
+        (event) => {
+          const touch = event.changedTouches[0];
+          const viewport = document.querySelector('.neo-viewport');
+          if (!touchStart || !touch || !viewport) return;
+          if (touchStart.filmstrip) {
+            touchStart = undefined;
+            return;
+          }
+          const deltaX = touch.clientX - touchStart.x;
+          const deltaY = touch.clientY - touchStart.y;
+          touchStart = undefined;
+          if (Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+          event.preventDefault();
+          viewport.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              bubbles: true,
+              cancelable: true,
+              key: deltaX < 0 ? 'ArrowRight' : 'ArrowLeft'
+            })
+          );
+        },
+        { capture: true, passive: false }
+      );
+
+      // Trackpad pinch is reported as Ctrl+wheel by Chromium browsers. Safari
+      // additionally exposes gesture events. Scale the app surface instead of
+      // the browser UI, so the presentation can be inspected without leaving
+      // its running session.
+      let presentationZoom = 1;
+      let gestureBaseZoom = 1;
+      const zoomScrollSurface = document.createElement('div');
+      zoomScrollSurface.className = 'neopresent-zoom-scroll-surface';
+      document.body.append(zoomScrollSurface);
+      const horizontalZoomScrollbar = document.createElement('input');
+      horizontalZoomScrollbar.className =
+        'neopresent-zoom-scrollbar neopresent-zoom-scrollbar-horizontal';
+      horizontalZoomScrollbar.type = 'range';
+      horizontalZoomScrollbar.min = '0';
+      horizontalZoomScrollbar.step = '1';
+      const verticalZoomScrollbar = document.createElement('input');
+      verticalZoomScrollbar.className =
+        'neopresent-zoom-scrollbar neopresent-zoom-scrollbar-vertical';
+      verticalZoomScrollbar.type = 'range';
+      verticalZoomScrollbar.min = '0';
+      verticalZoomScrollbar.step = '1';
+      document.body.append(horizontalZoomScrollbar, verticalZoomScrollbar);
+      const applyZoomPan = () => {
+        const viewport = document.querySelector('.neo-viewport');
+        if (!viewport || presentationZoom <= 1.001) return;
+        viewport.style.transform = `translate(${-Number(horizontalZoomScrollbar.value)}px, ${-Number(verticalZoomScrollbar.value)}px) scale(${presentationZoom})`;
+        viewport.style.transformOrigin = 'top left';
+      };
+      const refreshZoomScrollbars = (center = false) => {
+        const isZoomed = presentationZoom > 1.001;
+        const maximumX = Math.max(0, Math.round(window.innerWidth * (presentationZoom - 1)));
+        const maximumY = Math.max(0, Math.round(window.innerHeight * (presentationZoom - 1)));
+        horizontalZoomScrollbar.max = String(maximumX);
+        verticalZoomScrollbar.max = String(maximumY);
+        horizontalZoomScrollbar.value = String(
+          center ? maximumX / 2 : Math.min(maximumX, Number(horizontalZoomScrollbar.value))
+        );
+        verticalZoomScrollbar.value = String(
+          center ? maximumY / 2 : Math.min(maximumY, Number(verticalZoomScrollbar.value))
+        );
+        horizontalZoomScrollbar.style.display = isZoomed ? 'block' : 'none';
+        verticalZoomScrollbar.style.display = isZoomed ? 'block' : 'none';
+        applyZoomPan();
+      };
+      horizontalZoomScrollbar.addEventListener('input', applyZoomPan);
+      verticalZoomScrollbar.addEventListener('input', applyZoomPan);
+      const setPresentationZoom = (value) => {
+        const wasZoomed = presentationZoom > 1.001;
+        presentationZoom = Math.max(0.5, Math.min(2.5, value));
+        const isZoomed = presentationZoom > 1.001;
+        const viewport = document.querySelector('.neo-viewport');
+        document.documentElement.style.zoom = String(isZoomed ? 1 : presentationZoom);
+        document.documentElement.dataset.neopresentZoom = String(
+          Math.round(presentationZoom * 100)
+        );
+        document.documentElement.dataset.neopresentZoomed = String(isZoomed);
+        zoomScrollSurface.style.display = isZoomed ? 'block' : 'none';
+        zoomScrollSurface.style.height = isZoomed ? `${presentationZoom * 100}vh` : '0';
+        zoomScrollSurface.style.width = isZoomed ? `${presentationZoom * 100}vw` : '0';
+        if (viewport) {
+          viewport.style.transform = isZoomed ? `scale(${presentationZoom})` : '';
+          viewport.style.transformOrigin = isZoomed ? 'top left' : '';
+        }
+        if (!isZoomed) {
+          horizontalZoomScrollbar.value = '0';
+          verticalZoomScrollbar.value = '0';
+        }
+        refreshZoomScrollbars(isZoomed && !wasZoomed);
+        requestAnimationFrame(() => {
+          if (!isZoomed) {
+            window.scrollTo(0, 0);
+            return;
+          }
+          if (!wasZoomed) {
+            const root = document.documentElement;
+            window.scrollTo(
+              Math.max(0, (root.scrollWidth - window.innerWidth) / 2),
+              Math.max(0, (root.scrollHeight - window.innerHeight) / 2)
+            );
+          }
+        });
+      };
+
+      window.addEventListener('resize', refreshZoomScrollbars);
+      window.addEventListener(
+        'wheel',
+        (event) => {
+          const filmstrip = document.querySelector('[data-neopresent-filmstrip]');
+          if (!filmstrip || event.ctrlKey) return;
+          const bounds = filmstrip.getBoundingClientRect();
+          const insideFilmstrip =
+            event.clientX >= bounds.left &&
+            event.clientX <= bounds.right &&
+            event.clientY >= bounds.top &&
+            event.clientY <= bounds.bottom;
+          if (!insideFilmstrip) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
+          const delta =
+            Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+          filmstrip.style.scrollBehavior = 'auto';
+          filmstrip.scrollBy({
+            left: delta * unit * 1.8,
+            behavior: 'auto'
+          });
+        },
+        { capture: true, passive: false }
+      );
+      window.addEventListener(
+        'wheel',
+        (event) => {
+          if (event.ctrlKey || presentationZoom <= 1.001) return;
+          const target = event.target;
+          if (
+            target === horizontalZoomScrollbar ||
+            target === verticalZoomScrollbar ||
+            (target instanceof Element &&
+              target.closest('[data-neopresent-overview], [data-neopresent-filmstrip]'))
+          )
+            return;
+          event.preventDefault();
+          horizontalZoomScrollbar.value = String(
+            Math.max(
+              0,
+              Math.min(
+                Number(horizontalZoomScrollbar.max),
+                Number(horizontalZoomScrollbar.value) + event.deltaX
+              )
+            )
+          );
+          verticalZoomScrollbar.value = String(
+            Math.max(
+              0,
+              Math.min(
+                Number(verticalZoomScrollbar.max),
+                Number(verticalZoomScrollbar.value) + event.deltaY
+              )
+            )
+          );
+          applyZoomPan();
+        },
+        { capture: true, passive: false }
+      );
+
+      window.addEventListener(
+        'wheel',
+        (event) => {
+          if (!event.ctrlKey) return;
+          event.preventDefault();
+          setPresentationZoom(presentationZoom * Math.exp(-event.deltaY * 0.0015));
+        },
+        { capture: true, passive: false }
+      );
+
+      window.addEventListener(
+        'gesturestart',
+        (event) => {
+          gestureBaseZoom = presentationZoom;
+          event.preventDefault();
+        },
+        { capture: true, passive: false }
+      );
+
+      window.addEventListener(
+        'gesturechange',
+        (event) => {
+          event.preventDefault();
+          setPresentationZoom(gestureBaseZoom * event.scale);
+        },
+        { capture: true, passive: false }
+      );
+
+      const syncActiveSlideLetterbox = () => {
+        const centeredElement = document.elementFromPoint(
+          window.innerWidth / 2,
+          window.innerHeight / 2
+        );
+        if (centeredElement?.closest?.('[data-neopresent-overview]')) return;
+        // Overview cards are also slides, but their gallery/helix transforms
+        // are intentionally controlled by the overview camera. Only the
+        // audience host uses the fixed 1600-unit presentation canvas.
+        const mountedSlides = [
+          ...document.querySelectorAll('[data-neopresent-slide-host] > [data-neopresent-slide]')
+        ];
+        const viewport = document.querySelector('.neo-viewport');
+        if (!viewport || mountedSlides.length === 0) return;
+        const availableWidth = viewport.clientWidth || window.innerWidth;
+        const availableHeight = viewport.clientHeight || window.innerHeight;
+        mountedSlides.forEach((candidate) => {
+          const candidateHost = candidate.parentElement;
+          if (candidate.dataset.neopresentPdfInspection === 'true') {
+            // Native PDF plugins must receive the audience viewport's real CSS
+            // dimensions. Scaling a fixed 1600-unit iframe with `zoom` leaves
+            // Chromium/Edge rendering and scroll geometry at the old size.
+            candidate.style.alignSelf = 'stretch';
+            candidate.style.flex = '1 1 auto';
+            candidate.style.height = '100%';
+            candidate.style.margin = '0';
+            candidate.style.maxHeight = '100%';
+            candidate.style.maxWidth = '100%';
+            candidate.style.scale = '';
+            candidate.style.transformOrigin = '';
+            candidate.style.width = '100%';
+            candidate.style.zoom = '1';
+            candidate.dataset.neopresentUniformScale = '1';
+            candidate.dataset.neopresentUniformReady = 'true';
+            if (candidateHost) {
+              candidateHost.style.alignItems = 'stretch';
+              candidateHost.style.display = 'flex';
+              candidateHost.style.height = '100%';
+              candidateHost.style.justifyContent = 'stretch';
+              candidateHost.style.maxHeight = '100%';
+              candidateHost.style.maxWidth = '100%';
+              candidateHost.style.minHeight = '0';
+              candidateHost.style.minWidth = '0';
+              candidateHost.style.overflow = 'hidden';
+              candidateHost.style.width = '100%';
+            }
+            return;
+          }
+          const aspectMatch = String(
+            audienceAspect || candidate.dataset.neopresentAspect || '16:9'
+          ).match(/^\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)\s*$/);
+          if (!aspectMatch) return;
+          const ratio = Number(aspectMatch[1]) / Number(aspectMatch[2]);
+          if (!Number.isFinite(ratio) || ratio <= 0) return;
+          const designWidth = Number(candidate.dataset.neopresentDesignWidth) || 1600;
+          const designHeight =
+            Number(candidate.dataset.neopresentDesignHeight) || designWidth / ratio;
+          const uniformScale = Math.min(
+            availableWidth / designWidth,
+            availableHeight / designHeight
+          );
+          const resolvedScale =
+            Number.isFinite(uniformScale) && uniformScale > 0 ? String(uniformScale) : '1';
+          // Keep native PDF plugins in layout-aware CSS zoom. Applying a
+          // transform-style `scale` to an iframe preserves its appearance but
+          // leaves Chromium/Edge scrollbar geometry in the unscaled coordinate
+          // system: the horizontal bar can disappear and the vertical thumb
+          // cannot reach the true document bottom. PDF page fitting now runs
+          // after layout, so native and canvas slides can use the same zoom path.
+          const layoutScale = resolvedScale;
+          const paintedScale = '';
+          if (
+            candidate.dataset.neopresentUniformReady === 'true' &&
+            candidate.style.height === `${designHeight}px` &&
+            candidate.style.width === `${designWidth}px` &&
+            candidate.style.zoom === layoutScale &&
+            candidate.style.scale === paintedScale
+          )
+            return;
+          candidate.style.alignSelf = 'center';
+          candidate.style.flex = '0 0 auto';
+          candidate.style.height = `${designHeight}px`;
+          candidate.style.margin = 'auto';
+          candidate.style.maxHeight = 'none';
+          candidate.style.maxWidth = 'none';
+          candidate.style.scale = paintedScale;
+          candidate.style.transformOrigin = '';
+          candidate.style.width = `${designWidth}px`;
+          candidate.style.zoom = layoutScale;
+          candidate.dataset.neopresentUniformScale = String(uniformScale);
+          candidate.dataset.neopresentUniformReady = 'true';
+          if (candidateHost) {
+            candidateHost.style.alignItems = 'center';
+            candidateHost.style.display = 'flex';
+            candidateHost.style.height = '100%';
+            candidateHost.style.justifyContent = 'center';
+            candidateHost.style.maxHeight = '100%';
+            candidateHost.style.maxWidth = '100%';
+            candidateHost.style.minHeight = '0';
+            candidateHost.style.minWidth = '0';
+            candidateHost.style.overflow = 'hidden';
+            candidateHost.style.width = '100%';
+          }
+        });
+        const activeSlide = mountedSlides.find(
+          (candidate) =>
+            candidate.closest(
+              '[data-neopresent-slide-host].neo-layout-card-item.neo-active-item'
+            ) ||
+            (candidate.classList.contains('neo-active-item') &&
+              candidate.classList.contains('neo-layout-card-item'))
+        );
+        const slide =
+          activeSlide ||
+          centeredElement?.closest?.('[data-neopresent-slide]') ||
+          mountedSlides.find((candidate) => {
+            const style = getComputedStyle(candidate);
+            return style.display !== 'none' && candidate.getClientRects().length > 0;
+          });
+        const color = slide?.dataset.neopresentLetterboxColor;
+        if (!slide || !color) return;
+        document.documentElement.style.setProperty('--neopresent-letterbox-color', color);
+        document.documentElement.style.backgroundColor = color;
+        document.body.style.backgroundColor = color;
+        const activeHost = slide.closest('[data-neopresent-slide-host]') || slide.parentElement;
+        if (activeHost) activeHost.style.backgroundColor = color;
+        if (audienceSlideIndex !== lastReadyAudienceSlideIndex) {
+          lastReadyAudienceSlideIndex = audienceSlideIndex;
+          const readyIndex = audienceSlideIndex;
+          requestAnimationFrame(() => {
+            if (readyIndex !== audienceSlideIndex) return;
+            presenterStateChannel.postMessage({
+              type: 'audience-slide-ready',
+              index: readyIndex
+            });
+            if (viewerReloadedForPresenter) {
+              audienceAwaitingPresenterPreview = true;
+              viewerReloadedForPresenter = false;
+              presenterStateChannel.postMessage({ type: 'viewer-reload-complete' });
+            }
+            if (announceViewerReload) {
+              announceViewerReload = false;
+              presenterStateChannel.postMessage({ type: 'viewer-window-refreshed' });
+            }
+          });
+        }
+      };
+      let uniformScaleFrame = 0;
+      const scheduleUniformSlideScale = () => {
+        if (uniformScaleFrame) return;
+        uniformScaleFrame = requestAnimationFrame(() => {
+          uniformScaleFrame = 0;
+          syncActiveSlideLetterbox();
+        });
+      };
+      const uniformSlideObserver = new MutationObserver((records) => {
+        if (
+          records.some(
+            (record) =>
+              (record.type === 'attributes' &&
+                record.target instanceof Element &&
+                record.target.matches('[data-neopresent-slide], [data-neopresent-slide-host]')) ||
+              [...record.addedNodes].some(
+                (node) =>
+                  node instanceof Element &&
+                  (node.matches('[data-neopresent-slide]') ||
+                    node.querySelector('[data-neopresent-slide]'))
+              )
+          )
+        ) {
+          /*
+           * Mutation observers run before the browser's next paint. Size a
+           * newly mounted card immediately in that microtask so the hidden
+           * preparation state and the correctly scaled slide belong to the
+           * same rendered frame. Deferring this to requestAnimationFrame
+           * exposed one empty frame on every slide change.
+           */
+          syncActiveSlideLetterbox();
+          requestAnimationFrame(() => renderAudienceAnnotations());
+        }
+      });
+      uniformSlideObserver.observe(document.body, {
+        attributeFilter: ['class'],
+        attributes: true,
+        childList: true,
+        subtree: true
+      });
+      syncActiveSlideLetterbox();
+      const uniformViewport = document.querySelector('.neo-viewport');
+      const uniformResizeObserver =
+        uniformViewport && typeof ResizeObserver !== 'undefined'
+          ? new ResizeObserver(scheduleUniformSlideScale)
+          : null;
+      if (uniformViewport) uniformResizeObserver?.observe(uniformViewport);
+      document.addEventListener('fullscreenchange', () => scheduleUniformSlideScale());
+      window.addEventListener('resize', scheduleUniformSlideScale);
+
+      const dispatchPresenterCommand = (direction, paused) => {
+        if (direction === 'set-animations-paused') {
+          setAudienceAnimationsPaused(Boolean(paused));
+          return;
+        }
+        const keys = {
+          next: 'ArrowRight',
+          previous: 'ArrowLeft',
+          first: 'Home',
+          last: 'End',
+          notes: 'N',
+          toc: 'T',
+          filmstrip: 'V',
+          overview: 'O',
+          controls: 'C',
+          pdf: 'P',
+          'overview-close': '0',
+          'overview-select': 'Enter'
+        };
+        const key = keys[direction];
+        const viewport = document.querySelector('.neo-viewport');
+        if (!key || !viewport) return;
+        viewport.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            key
+          })
+        );
+      };
+
+      presenterControlChannel.onmessage = (event) => {
+        if (event.data?.direction === 'toc-focus') {
+          applyViewerTocFocus(event.data.index);
+          return;
+        }
+        dispatchPresenterCommand(event.data?.direction, event.data?.paused);
+      };
+      window.addEventListener('storage', (event) => {
+        if (event.key !== 'neopresent-presenter-command' || !event.newValue) return;
+        try {
+          dispatchPresenterCommand(JSON.parse(event.newValue).direction);
+        } catch {
+          // Ignore malformed commands from unrelated local storage users.
+        }
+      });
+      window.addEventListener('storage', (event) => {
+        if (event.key !== chartTooltipStorageKey || !event.newValue) return;
+        try {
+          const message = JSON.parse(event.newValue);
+          if (message?.type === 'chart-tooltip') updatePresenterChartTooltip(message);
+        } catch {
+          // Ignore malformed values from unrelated local storage users.
+        }
+      });
+    </script>
+  </body>
+</html>

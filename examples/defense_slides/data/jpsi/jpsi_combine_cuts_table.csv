@@ -1,0 +1,7 @@
+Feature , Cut value , $J/\psi$ efficiency 
+pairERatio          , $>$ 0.53 , 0.90 
+pairEAsym          , $<$ 0.40 , 0.90 
+FmsMulti       , $<$ 25  , 0.90 
+fpsL1Multi       , $<$ 63 , 0.90 
+FpsL3Multi     , $<$ 45  , 0.90 
+**Combined (all cuts)** , -- , **0.65**

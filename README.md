@@ -14,7 +14,7 @@ majoring in nuclear physics, it is specifically optimized for the data plotting 
 the **Standard Model**, **Feynman Diagram** and **Periodic Table** plot with fancy animations.
 
 The motivation is to make the timing perfect with the flow of your expression aligned with the data/plot 
-information reveal. Thus, the neopresent is an animation-rich framework with natively supporting data plotting and 
+information reveal. Thus, the neopresent is an animation-rich framework with built-in supporting data plotting and 
 fitting, almost every element in the slides is animatable.
 
 You don't even need to write the markdown, just make it as your AI skill or just let your AI go into the folder 
@@ -41,10 +41,10 @@ If you like the project, please give me a star! ⭐
 - **Keyboard-driven presenting** — Navigate slides, pause animations, enter overview or fullscreen modes, annotate, and open contextual help using shortcuts.
 - **Responsive rendering** — Slide contents scale proportionally with the slide canvas across viewer, presenter, windowed, and fullscreen modes.
 - **Local-first workflow** — Run presentations locally with a fast development server and use external assets without uploading the deck to a third-party service.
-- **Hover data value tips** — Hover data value tips for native plots.
+- **Hover data value tips** — Hover data value tips for built-in plots.
 
 ## Limitations
-- **Export annotations do not support storke styles due to PDF vector drawing limits**
+- **Export annotations do not support storke styles due to PDF vector drawing limits, so the chalk stroke will be a solid line for export PDF annotations**
 
 ## Quick start
 

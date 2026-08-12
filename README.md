@@ -1,4 +1,8 @@
-# NeoPresent -- The ultimate academic/scientific presentation framework
+<div align="center">
+
+# NeoPresent - The ultimate academic/scientific presentation framework
+
+</div>
 
 NeoPresent is a Markdown-first presentation framework for academic and scientific talks. It combines a themeable 
 audience viewer, a presenter dashboard, staged animation, scientific plots and diagrams, annotations, and vector-

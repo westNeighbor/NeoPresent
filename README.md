@@ -18,6 +18,30 @@ to analyze the framework and ask it to make slides for you based on your papers/
 
 If you like the project, please give me a star! ⭐
 
+## Highlights
+
+- **Markdown-first authoring** — Create complete presentations using readable Markdown and split large decks across multiple included files.
+- **Presenter and viewer modes** — Control the presentation from a dedicated presenter window with notes, timers, previews, and synchronized navigation.
+- **Live view for editting** — Live update slides when editting the markdown slide's contents.
+- **Scientific plotting** — Built-in scatter plots, histograms, uncertainties, fits, dual axes, statistics boxes, annotations, legends, and ROOT-inspired styling.
+- **Rich scientific notation** — Render inline and display mathematics with LaTeX syntax throughout headings, tables, captions, labels, and notes.
+- **Staged animations** — Reveal content, replace blocks, animate plot components, and control multi-stage scientific diagrams step by step.
+- **Interactive overview modes** — Navigate slides using filmstrip, grid, helix, and animated 3D gallery views.
+- **Native PDF support** — Embed PDF figures, inspect them in viewer mode, and preserve vector content during PDF export where possible.
+- **High-quality export** — Export complete presentations to PDF, optionally including speaker notes, animation steps, and annotations.
+- **Presentation annotations** — Draw directly on slides using multiple stroke styles, including a chalk-style pen, and export the results.
+- **Tables and external data** — Load CSV tables and JSON plot data, with styling, highlighting, mathematics, and animation controls.
+- **Scientific diagram blocks** — Create Feynman diagrams, Standard Model charts, periodic tables, and other structured visualizations directly in Markdown.
+- **Flexible layouts** — Arrange content using columns, groups, offsets, scaling, alignment, captions, and configurable slide dimensions.
+- **Theme system** — Customize colors, typography, backgrounds, footers, page numbers, frames, and other presentation-wide styles.
+- **Keyboard-driven presenting** — Navigate slides, pause animations, enter overview or fullscreen modes, annotate, and open contextual help using shortcuts.
+- **Responsive rendering** — Slide contents scale proportionally with the slide canvas across viewer, presenter, windowed, and fullscreen modes.
+- **Local-first workflow** — Run presentations locally with a fast development server and use external assets without uploading the deck to a third-party service.
+- **Hover data value tips** — Hover data value tips for native plots.
+
+## Limitations
+- **Export annotations do not support storke styles due to PDF vector drawing limits**
+
 ## Quick start
 
 Requirements: Node.js 22 or later and pnpm 11 or later.
@@ -173,3 +197,12 @@ The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), 
 
 `@neopresent/plugin-api` provides typed custom fenced-block and renderer registration. The viewer and exporter consume the same compiled presentation model.
 
+## Future plans
+
+- Add more math plot types 
+- Support more disciplines other than physics/math
+- Add UI live editting
+
+## Supports
+
+Please consider supporting the project if you like it and want to see it grow ❤️

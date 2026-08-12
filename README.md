@@ -62,7 +62,7 @@ pnpm setup:cli
 neopresent new my-talk
 neopresent serve presentations/my-talk/presentation.md
 ```
-Or if you are eager to check my example slides, change the markdown to see live updates!
+Or if you are eager to check my example slides: 
 ```sh
 neopresent serve examples/defense_slides/presentation.md
 ```
@@ -70,6 +70,8 @@ neopresent serve examples/defense_slides/presentation.md
 Open the viewer at `http://localhost:9090` and the presenter dashboard at `http://localhost:9090/presenter.html` 
 and press `H` to check and try the shortcuts. With/without Presenter side openning, the shortcuts in Viewer side 
 will be different.
+
+**Change the markdown to see live updates!**
 
 Useful commands:
 

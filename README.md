@@ -79,7 +79,7 @@ Useful commands:
 neopresent check presentations/my-talk/presentation.md
 neopresent outline presentations/my-talk/presentation.md
 neopresent build
-neopresent export presentations/my-talk/presentation.md --format pdf
+neopresent export presentations/my-talk/presentation.md --format pdf --jobs 8
 ```
 
 Use `neopresent help` for the command list or `neopresent help export` for command-specific options.

@@ -14,7 +14,7 @@ majoring in nuclear physics, it is specifically optimized for the data plotting 
 the **Standard Model**, **Feynman Diagram** and **Periodic Table** plot with fancy animations.
 
 The motivation is to make the timing perfect with the flow of your expression aligned with the data/plot 
-information reveal. Thus, the neopresent is an animation-rich framework with built-in supporting data plotting and 
+information reveal. Thus, the NeoPresent is an animation-rich framework with built-in supporting data plotting and 
 fitting, almost every element in the slides is animatable.
 
 You don't even need to write the markdown, just make it as your AI skill or just let your AI go into the folder 

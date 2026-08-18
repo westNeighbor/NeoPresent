@@ -191,6 +191,54 @@ Press `H` or `?` in either window for theme-aware help. Viewer help changes auto
 
 The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), eraser (`E`), blank screen (`B`), search (`F`), and bookmarks (`M`). See [Presenting and controls](docs/presenting.md) for the complete context-sensitive tables and PDF inspection controls.
 
+## Release notes
+<details>
+  <summary>v0.1.0</summary>
+
+  <!-- Bulk Build part -->
+  <div style="margin-left: 20px;margin-bottom: 10px;">
+    <br>
+    <b> Nodes </b>
+    <ul>
+      <li>Simple markdown to write.</li>
+      <li>Built-in plotting and fitting.</li>
+        <ul>
+        <li>Optimized for nuclear or high energy physics data analysis, histogram/fitting, data with errors, error bands plots</li>
+        <li>Special <code>Standard Model</code>, <code>Feynman Diagram</code>, <code>Periodic Table</code> plotting with fancy animations</li>
+        </ul>
+      <li>Built-in PDF format plot support.</li>
+        <ul>
+        <li><code>p</code> to PDF model to check original PDF files when the slide has PDF plots</li>
+        </ul>
+      <li>Built-in table support.</li>
+        <ul>
+        <li>markdown and math support</li>
+        <li>animation by rows, columns and cells support</li>
+        </ul>
+      <li>Presenter and Viewer rich-controls.</li>
+        <ul>
+        <li>sportlight (<code>s</code>), laser (<code>l</code>), annotation/eraser (<code>a</code>/<code>e</code>), TOF (<code>t</code>)</li>
+        <li>overview (<code>o</code>/<code>0</code>), filmstrip (<code>v</code>)</li>
+        <li>more to check by <code>h</code> or <code>?</code>, available controls in Viewer are different with/without Presenter open</li>
+        </ul>
+      <li>Animation-rich.</li>
+        <ul>
+        <li>Staged animation with <code>→</code>/<code>←</code></li>
+        <li>Automatic animations with <code>Space</code> key to pause/play</li>
+        </ul>
+      <li>Live update when editing.</li>
+        <ul>
+        <li>Live update slides during editting the markdown source when saving</li>
+        <li>Live theme updating</li>
+        <li>Live aspect ratio updating</li>
+        <li>A lot more</li>
+        </ul>
+    </ul>
+    <br>
+  </div>
+
+</details>
+
 ## Workspace
 
 - `packages/core` — presentation document model

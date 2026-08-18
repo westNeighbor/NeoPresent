@@ -198,7 +198,6 @@ The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), 
   <!-- Bulk Build part -->
   <div style="margin-left: 20px;margin-bottom: 10px;">
     <br>
-    <b> Nodes </b>
     <ul>
       <li>Simple markdown to write.</li>
       <li>Built-in plotting and fitting.</li>

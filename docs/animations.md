@@ -326,6 +326,21 @@ but export that block once at its completed state.
 | `grow`    | Points, bars, errors, shapes          | Scales marks from their origin                   |
 | `rise`    | Bars, points, heatmap cells, surfaces | Moves/scales upward into place                   |
 
+For pie and donut charts, all four animation names reveal slices in source
+order. `draw` and `grow` expand each wedge from the chart center; `fade`
+fades slices in; and `rise` moves them into place. NeoPresent automatically
+staggers the slices within the configured duration.
+
+Radar charts animate each series polygon independently. `draw` and `grow`
+expand the polygon from the chart center, while `fade` and `rise` use their
+standard plot-layer motion. Put timing fields inside a `series:` entry to
+sequence comparisons.
+
+Ratio, efficiency, ROC, polar, stacked-bar, ternary, forest, and corner plots
+use the same `animation`, `animation-duration`, `animation-delay`, and
+`animation-easing` fields. Multi-series plot families also accept those
+fields inside each `series:` entry.
+
 ### Data, uncertainty, and fit timeline
 
 ````markdown

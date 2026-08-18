@@ -5,21 +5,40 @@ export type ChartKind =
   | 'bar'
   | 'boxplot'
   | 'contour'
+  | 'corner'
   | 'covariance'
   | 'density2d'
+  | 'ecdf'
+  | 'efficiency'
+  | 'forest'
+  | 'geographic'
   | 'heatmap'
   | 'hexbin'
   | 'histogram'
   | 'line'
+  | 'pie'
   | 'periodic-table'
   | 'profile'
+  | 'polar'
+  | 'polar-function'
+  | 'precision-recall'
   | 'quiver'
+  | 'radar'
+  | 'ratio'
+  | 'roc'
+  | 'sankey'
   | 'ridgeline'
   | 'scatter'
   | 'streamline'
   | 'stacked-histogram'
+  | 'stacked-bar'
   | 'standard-model'
   | 'surface'
+  | 'ternary'
+  | 'time-series'
+  | 'volcano'
+  | 'waterfall'
+  | 'qq'
   | 'violin';
 
 export interface ChartOptions {
@@ -121,7 +140,7 @@ export class Chart extends Node<'chart'> {
     const labels =
       options.labels?.map((label) => label.trim()) ??
       options.values.map((_, index) => String(index + 1));
-    if (labels.length !== options.values.length) {
+    if (options.values.length > 0 && labels.length !== options.values.length) {
       throw new TypeError('A chart requires one label for every value.');
     }
 
@@ -132,13 +151,22 @@ export class Chart extends Node<'chart'> {
         options.kind === 'area' ||
         options.kind === 'boxplot' ||
         options.kind === 'contour' ||
+        options.kind === 'corner' ||
         options.kind === 'covariance' ||
         options.kind === 'density2d' ||
+        options.kind === 'ecdf' ||
+        options.kind === 'efficiency' ||
+        options.kind === 'forest' ||
+        options.kind === 'geographic' ||
         options.kind === 'heatmap' ||
         options.kind === 'hexbin' ||
         options.kind === 'histogram' ||
         options.kind === 'periodic-table' ||
+        options.kind === 'pie' ||
         options.kind === 'profile' ||
+        options.kind === 'polar' ||
+        options.kind === 'polar-function' ||
+        options.kind === 'precision-recall' ||
         options.kind === 'ridgeline' ||
         options.kind === 'scatter' ||
         options.kind === 'surface' ||
@@ -146,6 +174,16 @@ export class Chart extends Node<'chart'> {
         options.kind === 'stacked-histogram' ||
         options.kind === 'standard-model' ||
         options.kind === 'quiver' ||
+        options.kind === 'radar' ||
+        options.kind === 'ratio' ||
+        options.kind === 'roc' ||
+        options.kind === 'sankey' ||
+        options.kind === 'stacked-bar' ||
+        options.kind === 'ternary' ||
+        options.kind === 'time-series' ||
+        options.kind === 'volcano' ||
+        options.kind === 'waterfall' ||
+        options.kind === 'qq' ||
         options.kind === 'violin'
           ? options.kind
           : 'line',

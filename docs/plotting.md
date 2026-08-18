@@ -10,19 +10,23 @@ registered plot-level keys, use the [complete plot settings reference](plot-sett
 
 1. [Plot anatomy](#plot-anatomy)
 2. [Basic 2D plots](#basic-2d-plots)
-3. [Series and external data](#series-and-external-data)
-4. [Functions and mixed plots](#functions-and-mixed-plots)
-5. [Errors and uncertainty layers](#errors-and-uncertainty-layers)
-6. [Fits and fit bands](#fits-and-fit-bands)
-7. [Legends and ordering](#legends-and-ordering)
-8. [Reference lines and shapes](#reference-lines-and-shapes)
-9. [Axes, scales, labels, and LaTeX](#axes-scales-labels-and-latex)
-10. [Highlights](#highlights)
-11. [Heatmaps](#heatmaps)
-12. [3D surfaces](#3d-surfaces)
-13. [Palettes](#palettes)
-14. [Plot animation](#plot-animation)
-15. [Captions](#captions)
+3. [Pie and donut charts](#pie-and-donut-charts)
+4. [Radar charts](#radar-charts)
+5. [Series and external data](#series-and-external-data)
+6. [Functions and mixed plots](#functions-and-mixed-plots)
+7. [Errors and uncertainty layers](#errors-and-uncertainty-layers)
+8. [Fits and fit bands](#fits-and-fit-bands)
+9. [Legends and ordering](#legends-and-ordering)
+10. [Reference lines and shapes](#reference-lines-and-shapes)
+11. [Axes, scales, labels, and LaTeX](#axes-scales-labels-and-latex)
+12. [Highlights](#highlights)
+13. [Heatmaps](#heatmaps)
+14. [Contour and 2D density plots](#contour-and-2d-density-plots)
+15. [Additional scientific plot families](#additional-scientific-plot-families)
+16. [3D surfaces](#3d-surfaces)
+17. [Palettes](#palettes)
+18. [Plot animation](#plot-animation)
+19. [Captions](#captions)
 
 ## Plot anatomy
 
@@ -192,6 +196,226 @@ type: bar
 labels: 200 GeV, 510 GeV, 13 TeV
 values: 1420,2380,9100
 data-color: #8b5cf6
+```
+````
+
+For grouped bars, define the categories once with `labels` and add one
+`series:` entry for each group. Bars are placed side by side within each
+category:
+
+````markdown
+```plot
+type: bar
+title: County population by year
+labels: 2022, 2023, 2024
+x-label: Year
+y-label: Population
+legend: true
+animation: grow
+
+series: Cook | values: 42,58,71 | color: #ef4444 | legend: true
+series: DuPage | values: 31,37,44 | color: #3b82f6 | legend: true
+series: Lake | values: 22,29,35 | color: #22c55e | legend: true
+```
+````
+
+Each bar has its own series-and-category hover tooltip. Series-specific
+`animation`, `animation-delay`, `animation-duration`, and
+`animation-easing` values are supported. Negative values extend below the
+shared zero baseline.
+
+## Pie and donut charts
+
+Use positive `values` for slice sizes and `labels` for their names. `pie`,
+`donut`, and `doughnut` are accepted type names:
+
+````markdown
+```plot
+type: donut
+title: Event composition
+labels: Signal, Background, Other
+values: 52,33,15
+pie-colors: #ef4444,#3b82f6,#22c55e
+pie-inner-radius: 45
+pie-start-angle: -90
+pie-labels: true
+animation: draw
+animation-duration: 900ms
+```
+````
+
+Slice labels show percentages, while hover tooltips show the label, raw value,
+and percentage. Slices smaller than three percent remain in the legend and
+tooltip but omit their in-chart label to prevent collisions.
+
+`pie-inner-radius` is a percentage from `0` (pie) to `90` (thin donut).
+Use `pie-label-position` to move labels relative to the radius; `1` places
+them at the outer edge. Other controls are `pie-label-color`,
+`pie-label-size`, `pie-stroke-color`, and `pie-stroke-width`.
+
+Pie charts accept `draw`, `grow`, `rise`, and `fade`. Slices are
+automatically staggered in source order, starting after `animation-delay`.
+
+## Radar charts
+
+Radar charts compare measurements across shared categorical axes. `radar`,
+`spider`, and `spider-chart` are accepted type names. At least three
+categories are required:
+
+````markdown
+```plot
+type: radar
+title: Model comparison
+labels: Accuracy, Speed, Stability, Coverage, Efficiency
+radar-min: 0
+radar-max: 100
+radar-grid-levels: 5
+legend: true
+animation: draw
+animation-duration: 900ms
+
+series: Model A | values: 82,74,91,68,79 | color: #3b82f6 | legend: true
+series: Model B | values: 71,89,76,84,73 | color: #ef4444 | legend: true
+```
+````
+
+Each series creates a filled polygon, and each vertex provides a hover tooltip.
+Use `radar-fill-alpha`, `radar-stroke-width`, and `radar-point-size` to
+style the data. Grid and category text use `radar-grid-color`,
+`radar-label-color`, and `radar-label-size`.
+
+When `radar-max` is omitted, the maximum data value receives ten percent
+headroom. The default minimum is zero unless the data contains negative values.
+Radar series accept `draw`, `grow`, `rise`, and `fade` plus the standard
+duration, delay, and easing settings.
+
+## Advanced scientific plots
+
+### Ratio and pull panels
+
+The first series is treated as data and the second as the denominator/model:
+
+````markdown
+```plot
+type: ratio
+labels: Bin 1, Bin 2, Bin 3
+series: Data | values: 102,87,64 | error: 10,9,8
+series: Model | values: 98,91,61
+ratio-reference: 1
+```
+````
+
+Use `type: pull` or `ratio-mode: pull` for
+`(data-model)/data-error`.
+
+### Efficiency with binomial errors
+
+`values` contains passed counts and `efficiency-total` contains total counts.
+NeoPresent draws binomial Wilson intervals:
+
+````markdown
+```plot
+type: efficiency
+labels: Trigger, Tracking, Selection
+values: 920,810,640
+efficiency-total: 1000,920,810
+animation: grow
+```
+````
+
+### ROC curve
+
+````markdown
+```plot
+type: roc
+series: Classifier A | x: 0,.05,.15,.35,1 | y: 0,.55,.78,.92,1 | color: #3b82f6
+series: Classifier B | x: 0,.08,.22,.45,1 | y: 0,.48,.71,.88,1 | color: #ef4444
+```
+````
+
+### Polar plot
+
+````markdown
+```plot
+type: polar
+labels: 0°, 60°, 120°, 180°, 240°, 300°
+values: 4,7,5,8,6,3
+polar-max: 10
+polar-grid-levels: 5
+```
+````
+
+### Stacked bars
+
+````markdown
+```plot
+type: stacked-bar
+labels: 2022, 2023, 2024
+series: Signal | values: 42,58,71 | color: #3b82f6
+series: Background | values: 31,27,22 | color: #ef4444
+```
+````
+
+Use `type: normalized-stacked-bar` or `stack-bar-normalized: true` for
+unit-height composition bars.
+
+### Ternary plot
+
+`x`, `y`, and `values` are the A, B, and C components:
+
+````markdown
+```plot
+type: ternary
+labels: Sample 1, Sample 2, Sample 3
+x: 20,50,25
+y: 30,20,50
+values: 50,30,25
+ternary-a-label: Solid
+ternary-b-label: Liquid
+ternary-c-label: Gas
+animation: grow
+animation-duration: 900ms
+```
+````
+
+### Forest plot
+
+````markdown
+```plot
+type: forest
+labels: Study A, Study B, Study C
+values: 1.2,.85,1.05
+error-low: .2,.12,.18
+error-high: .25,.15,.2
+forest-zero: 1
+```
+````
+
+External forest data can provide absolute confidence limits directly:
+
+````markdown
+```plot
+type: forest
+source: data/estimates.csv
+x: study
+y: estimate
+forest-lower-field: lower_95
+forest-upper-field: upper_95
+forest-zero: 1
+```
+````
+
+### Corner plot
+
+Each series represents one variable. Diagonal cells show marginal histograms
+and lower-triangle cells show pairwise samples:
+
+````markdown
+```plot
+type: corner
+series: Mass | values: 3.08,3.11,3.09,3.13,3.10
+series: Width | values: .08,.07,.09,.08,.10
+series: Yield | values: 92,105,98,111,101
 ```
 ````
 
@@ -520,7 +744,403 @@ Heatmap tooltips use the displayed tick labels rather than only numeric coordina
 - Color bar: width, height, alpha, offsets, min/max labels, range-label style, and color-label style.
 - Palette: preset name or custom stops/colors/RGBA channels.
 
+## Contour and 2D density plots
+
+Contour plots accept a rectangular grid. `x` and `y` define its coordinates and
+`values` contains the row-major scalar field:
+
+````markdown
+```plot
+type: contour
+title: Likelihood scan
+x: 0,1,2
+y: 0,1,2
+values: 0,1,0,1,3,1,0,1,0
+x-label: Mass
+y-label: Width
+heatmap-color-label: Likelihood
+heatmap-palette: kBird
+contour-levels: 8
+contour-fill: true
+contour-line-color: #ffffff
+contour-line-width: 1.5
+```
+````
+
+Set `contour-fill: false` for isolines only. Contour cells provide exact-value
+tooltips; the numeric axes and color bar are generated automatically.
+
+For scattered samples, use a kernel-density estimate:
+
+````markdown
+```plot
+type: density2d
+title: Event density
+x: 0,.15,.2,.48,.53,.6,.82,1
+y: .1,.18,.32,.45,.5,.62,.8,.92
+x-label: Observable A
+y-label: Observable B
+density-grid-size: 32
+density-bandwidth: .09
+density-palette: kViridis
+heatmap-color-label: Density
+```
+````
+
+`density-grid-size` controls spatial resolution and `density-bandwidth` controls
+smoothing in normalized plot coordinates. Hovering a cell shows its calculated
+density.
+
+## Additional scientific plot families
+
+### Shared presentation controls
+
+All scientific plot titles honor `title-size`, `title-color`, `title-font`,
+`title-alpha`, `title-offset-x`, and `title-offset-y`. Cartesian axis titles
+honor the corresponding `x-label-*` and `y-label-*` size, color, font, alpha,
+and offset fields. Plot families without Cartesian axes use their semantic label
+controls instead (for example `ternary-*-label`, `radar-label-*`, and
+`corner-label-size`).
+
+Legends on pie/donut, radar, stacked bars, ROC, precision–recall, volcano,
+QQ, ECDF/survival, waterfall, time-series, and geographic plots use the shared
+`legend-position`, `legend-x`, `legend-y`, offsets, size, font, color, alpha,
+and columns controls. Sankey node labels, ternary component labels, and corner
+row/column labels are intrinsic plot annotations rather than legends.
+
+Contour and density plots use the `heatmap-colorbar-*` controls. Geographic
+choropleths use `geo-colorbar-*`, and 3D surfaces use `surface-colorbar-*`.
+
+Distribution diagnostics accept raw samples:
+
+````markdown
+```plot
+type: qq
+values: 1.1,1.4,1.8,2.0,2.2,2.7,3.1
+```
+
+```plot
+type: ecdf
+values: 1.1,1.4,1.8,2.0,2.2,2.7,3.1
+```
+
+```plot
+type: survival
+values: 2,3,5,7,8,12
+```
+````
+
+ECDF and survival curves hide point markers by default while retaining invisible
+hover targets. Set `ecdf-points: true` to display them and use
+`ecdf-point-size` to control their radius.
+
+QQ and ECDF plots can load a single measurement column with `source:` and
+`value:`. A survival plot becomes a Kaplan–Meier estimate when event status is
+provided (`1` = observed event, `0` = censored):
+
+````markdown
+```plot
+type: survival
+source: data/survival.csv
+value: time
+survival-event-field: observed
+survival-confidence: true
+survival-confidence-level: 95
+```
+````
+
+Censored observations are shown as tick marks and include hover details.
+`survival-confidence: true` draws a log-log transformed Greenwood confidence
+band. Customize it with `survival-confidence-level`,
+`survival-confidence-color`, and `survival-confidence-alpha`.
+
+Classifier performance uses recall as x and precision as y:
+
+````markdown
+```plot
+type: precision-recall
+series: Classifier A | x: 0,.2,.5,.8,1 | y: 1,.94,.82,.63,.25 | color: #3b82f6
+series: Classifier B | x: 0,.2,.5,.8,1 | y: 1,.88,.73,.51,.2 | color: #ef4444
+```
+````
+
+Volcano and waterfall plots use ordinary numeric values:
+
+````markdown
+```plot
+type: volcano
+x: -2.4,-1.3,-.2,.3,1.2,2.1
+y: 4.2,2.1,.4,.8,2.7,5.1
+labels: Gene A,Gene B,Gene C,Gene D,Gene E,Gene F
+volcano-fold-threshold: 1
+volcano-significance-threshold: 1.30103
+legend: true
+volcano-labels: true
+volcano-label-significant-only: true
+volcano-label-size: 14
+```
+
+```plot
+type: waterfall
+labels: Baseline,Calibration,Selection,Background
+values: 100,12,-18,-7
+waterfall-total: true
+```
+````
+
+`waterfall-total: true` appends a total bar. External data can also identify
+absolute total rows; other rows remain relative changes:
+
+````markdown
+```plot
+type: waterfall
+source: data/contributions.csv
+x: step
+y: amount
+waterfall-total-field: kind
+```
+````
+
+The total column accepts `total`, `true`, `yes`, or `1`.
+
+Precision–recall and multi-region geographic plots show legends automatically
+when multiple series are present. Set `legend: false` to suppress them. Use
+`legend: true` to add semantic legends to volcano and waterfall plots or a named
+single-series legend to QQ, ECDF/survival, and time-series plots. The shared
+`legend-*` settings control placement and appearance.
+
+Specialized scientific plots support `legend-position` values `top-left`,
+`top-center`, `top-right`, `middle-left`, `middle-center`, `middle-right`,
+`bottom-left`, `bottom-center`, and `bottom-right`. Fine-tune a preset with
+`legend-offset-x` and `legend-offset-y`. Alternatively, set `legend-x` and
+`legend-y`; values from 0 to 1 are normalized chart coordinates, while larger
+values are SVG pixels.
+
+Sankey links use a named series for each `source -> target` flow:
+
+````markdown
+```plot
+type: sankey
+series: Generated -> Reconstructed | values: 850
+series: Reconstructed -> Selected | values: 620
+series: Reconstructed -> Rejected | values: 230
+```
+````
+
+Time-series labels accept date text, uncertainties produce a confidence envelope,
+and `time-window` keeps the most recent samples. Empty measurements in external
+CSV/JSON sources remain gaps rather than being interpreted as zero or connected
+across:
+
+````markdown
+```plot
+type: time-series
+labels: 2026-01,2026-02,2026-03,2026-04
+values: 10.2,11.1,10.8,12.0
+error: .4,.5,.3,.6
+time-window: 4
+```
+````
+
+An external file uses its date, value, and optional uncertainty columns normally:
+
+````markdown
+```plot
+type: time-series
+source: data/rates.csv
+x: date
+y: rate
+error: uncertainty
+time-window: 20
+```
+````
+
+Geographic plots accept longitude in `x` and latitude in `y`. Series with three or
+more coordinate pairs render supplied region polygons:
+
+````markdown
+```plot
+type: geographic
+x: -87.63,2.35
+y: 41.88,48.86
+labels: Chicago,Paris
+series: Study region | x: -10,10,0 | y: 40,40,55 | color: #f59e0b
+```
+````
+
+Standard GeoJSON `FeatureCollection` files can be loaded directly. Point,
+Polygon, and MultiPolygon geometries are supported:
+
+````markdown
+```plot
+type: geographic
+source: data/regions.geojson
+geo-name-field: title
+geo-value-field: event_rate
+geo-palette: kViridis
+geo-color-label: Event rate
+legend: true
+```
+````
+
+`geo-name-field` selects the feature property used for point hover tips and
+polygon legends; it defaults to `name`. When `geo-value-field` names a numeric
+feature property, points and regions are colored as a choropleth and a color bar
+is added. Select its palette and label with `geo-palette` and `geo-color-label`.
+Move and resize the scale with `geo-colorbar-x`, `geo-colorbar-y`,
+`geo-colorbar-width`, and `geo-colorbar-height`; these use SVG pixel units.
+Move the longitude and latitude axis titles with `x-label-offset-x`,
+`x-label-offset-y`, `y-label-offset-x`, and `y-label-offset-y`. These offsets
+also work on the other specialized Cartesian scientific plots.
+Polygon holes are currently ignored and each MultiPolygon component is rendered
+as a separately named region.
+
+### External data for scientific plots
+
+The scientific plot families accept the same `source:` URL and named-column syntax
+as ordinary charts. CSV and JSON records behave identically. For example:
+
+````markdown
+```plot
+type: contour
+source: data/scan.csv
+x: mass
+y: width
+value: likelihood
+```
+
+```plot
+type: density2d
+source: data/events.json
+x: observable_a
+y: observable_b
+```
+
+```plot
+type: ternary
+source: data/composition.csv
+x: solid
+y: liquid
+value: gas
+point-label-field: sample
+```
+
+```plot
+type: efficiency
+source: data/efficiency.json
+x: stage
+y: passed
+efficiency-total-field: total
+```
+
+```plot
+type: volcano
+source: data/results.csv
+x: log2_fold_change
+y: minus_log10_p
+point-label-field: gene
+```
+
+```plot
+type: sankey
+source: data/flow.csv
+sankey-source-field: source
+sankey-target-field: target
+sankey-value-field: events
+```
+
+```plot
+type: geographic
+source: data/sites.json
+x: longitude
+y: latitude
+point-label-field: site
+```
+````
+
+Contour input contains one row for every x/y grid position. Ternary rows contain
+the three components. Efficiency rows contain passed and total counts. Sankey rows
+contain one directed link each. To group geographic coordinate rows into region
+polygons, add `geo-region-field: region`; rows with the same region value become
+one polygon series.
+
 ## 3D surfaces
+
+## Coordinate function plots
+
+Angles are in radians. Range fields accept expressions such as `pi` and `2*pi`.
+
+### Polar curve: r = f(theta)
+
+````markdown
+```plot
+type: polar-function
+title: Five-petal rose
+function: 3*cos(5*theta)
+theta-min: 0
+theta-max: 2*pi
+theta-samples: 720
+polar-grid-levels: 5
+animation: draw
+```
+````
+
+### Cylindrical surface: z = f(r, theta)
+
+````markdown
+```plot
+type: surface
+title: Cylindrical wave
+surface-coordinates: cylindrical
+surface-function: sin(r)*cos(3*theta)
+r-min: 0
+r-max: 6
+r-samples: 36
+theta-min: 0
+theta-max: 2*pi
+theta-samples: 72
+surface-palette: kBird
+surface-z-label: $z$
+```
+````
+
+### Spherical radial surface: rho = f(theta, phi)
+
+````markdown
+```plot
+type: surface
+title: Deformed sphere
+surface-coordinates: spherical
+surface-function: 1 + .18*sin(5*theta)*sin(3*phi)
+theta-min: 0
+theta-max: 2*pi
+theta-samples: 72
+phi-min: 0
+phi-max: pi
+phi-samples: 36
+surface-palette: kViridis
+```
+````
+
+### General parametric surface
+
+````markdown
+```plot
+type: surface
+title: Parametric torus
+surface-coordinates: parametric
+x-function: (2 + .7*cos(v))*cos(u)
+y-function: (2 + .7*cos(v))*sin(u)
+z-function: .7*sin(v)
+u-min: 0
+u-max: 2*pi
+u-samples: 72
+v-min: 0
+v-max: 2*pi
+v-samples: 36
+surface-palette: kViridis
+```
+````
 
 ### Function surface
 
@@ -538,6 +1158,7 @@ x-label: $x$
 y-label: $y$
 surface-z-label: $f(x,y)$
 surface-palette: kBird
+surface-background: transparent
 surface-mesh-color: rgba(15,23,42,.55)
 surface-mesh-width: 1
 surface-alpha: .92
@@ -574,6 +1195,7 @@ Use `series:` and `function:` entries in a surface plot. Each overlay can contro
 | Area        | Fields                                                                            |
 | ----------- | --------------------------------------------------------------------------------- |
 | Camera      | `surface-azimuth`, `surface-elevation`, `surface-zoom`, `surface-interactive`     |
+| Background  | `surface-background` (`transparent`, a named color, hex, RGB, or RGBA)            |
 | Mesh        | `surface-mesh-color`, `surface-mesh-width`, `surface-alpha`                       |
 | Axes        | `surface-axis-color`, `surface-axis-width`                                        |
 | Ticks       | `surface-tick-color`, `surface-tick-size`, offsets, total/x/y tick counts         |
@@ -625,4 +1247,9 @@ animation-delay: 500ms
 animation-easing: cubic-bezier(.2,.8,.2,1)
 ```
 
-Common plot animations are `draw`, `fade`, `grow`, and `rise`. Surfaces additionally support `wave`. Apply timing inside an individual `series:`, `uncertainty:`, `fit`, `reference:`, `shape:`, or function entry for independent sequencing. See the [animation guide](animations.md) for complete behavior and synchronized examples.
+Common plot animations are `draw`, `fade`, `grow`, and `rise`. Pie slices
+and heatmap cells stagger automatically. Surfaces additionally support `wave`.
+Apply timing inside an individual `series:`, `uncertainty:`, `fit`,
+`reference:`, `shape:`, or function entry for independent sequencing. See
+the [animation guide](animations.md) for complete behavior and synchronized
+examples.

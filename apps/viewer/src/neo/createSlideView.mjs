@@ -149,7 +149,8 @@ function getChartStageCount(chart) {
     values.push(item?.revealStage);
     for (const layer of item?.uncertaintyLayers ?? []) values.push(layer?.revealStage);
   }
-  for (const item of chart.getAttribute?.('uncertaintyLayers') ?? []) values.push(item?.revealStage);
+  for (const item of chart.getAttribute?.('uncertaintyLayers') ?? [])
+    values.push(item?.revealStage);
   for (const item of chart.getAttribute?.('shapes') ?? []) values.push(item?.['reveal-stage']);
   for (const item of chart.getAttribute?.('annotations') ?? []) values.push(item?.revealStage);
   for (const item of chart.getAttribute?.('fitDefinitions') ?? [])
@@ -235,13 +236,18 @@ function createSlideVdomRaw(
   aspectOverride = '',
   exportSnapshot = false
 ) {
+  const slideBackground = slide.getAttribute?.('background');
+  const slideBackgroundOverlay = slide.getAttribute?.('backgroundOverlay');
   const background = resolveBackground(
-    slide.getAttribute?.('background'),
+    slideBackground,
     theme.background,
-    slide.getAttribute?.('backgroundOverlay'),
+    slideBackgroundOverlay,
     slide.getAttribute?.('backgroundPosition'),
     slide.getAttribute?.('backgroundSize')
   );
+  const themeBackgroundImage =
+    !slideBackground && !slideBackgroundOverlay ? theme.backgroundImage : undefined;
+  const themeBackgroundSize = themeBackgroundImage ? theme.backgroundSize ?? 'auto' : undefined;
   const transition = slide.getAttribute?.('transition') ?? 'none';
   const transitionDurationMs = slide.getAttribute?.('transitionDurationMs');
   const alignment = getSlideAlignment(slide);
@@ -300,6 +306,8 @@ function createSlideVdomRaw(
       style: {
         alignItems: 'center',
         background,
+        backgroundImage: themeBackgroundImage,
+        backgroundSize: themeBackgroundSize,
         boxSizing: 'border-box',
         color: theme.foreground,
         fontFamily: bodyFont,
@@ -318,9 +326,17 @@ function createSlideVdomRaw(
         {
           tag: 'div',
           style: {
-            borderTop: `4px solid ${theme.accent}`,
+            background: theme.sectionBackground,
+            borderBottom: theme.sectionBorderBottom,
+            borderLeft: theme.sectionBorderLeft,
+            borderRight: theme.sectionBorderRight,
+            borderTop: theme.sectionBorderTop ?? `4px solid ${theme.accent}`,
+            backdropFilter: theme.sectionBackdropFilter,
+            webkitBackdropFilter: theme.sectionBackdropFilter,
+            boxShadow: theme.sectionShadow,
             maxWidth: '900px',
-            paddingTop: '1.5rem',
+            padding: theme.sectionPadding,
+            paddingTop: theme.sectionPadding ? undefined : '1.5rem',
             width: '100%'
           },
           cn: [
@@ -340,14 +356,17 @@ function createSlideVdomRaw(
               cn: createInlineContent(resolveDatePlaceholders(section), theme),
               style: {
                 background: theme.kind === 'fyma' ? '#ffffff' : undefined,
-                borderBottom: theme.headingRule ? `2px solid ${theme.headingRule}` : undefined,
+                borderBottom: theme.headingRule
+                  ? `${theme.headingRuleWidth ?? '2px'} ${theme.headingRuleStyle ?? 'solid'} ${theme.headingRule}`
+                  : undefined,
                 borderTop: theme.kind === 'fyma' ? `1px solid ${theme.border}` : undefined,
                 color: theme.headingColor ?? theme.foreground,
+                ...createThemeHeadingDecoration(theme),
                 fontFamily: headingFont,
                 fontSize: '4.5rem',
                 lineHeight: 1.1,
                 margin: 0,
-                padding: theme.kind === 'fyma' ? '1.4rem 3rem' : undefined
+                padding: theme.kind === 'fyma' ? '1.4rem 3rem' : theme.headingPadding
               }
             }
           ]
@@ -372,6 +391,8 @@ function createSlideVdomRaw(
     style: {
       alignItems: alignment.items,
       background,
+      backgroundImage: themeBackgroundImage,
+      backgroundSize: themeBackgroundSize,
       boxSizing: 'border-box',
       color: theme.foreground,
       fontFamily: bodyFont,
@@ -400,9 +421,7 @@ function createSlideVdomRaw(
             html: createFeynmanDiagram(
               node.text,
               theme,
-              exportSnapshot && !feynmanExportStages
-                ? Number.POSITIVE_INFINITY
-                : nodeRevealIndex,
+              exportSnapshot && !feynmanExportStages ? Number.POSITIVE_INFINITY : nodeRevealIndex,
               animate
             ),
             style: {
@@ -703,10 +722,11 @@ function createSlideVdomRaw(
               color: theme.headingColor ?? theme.foreground,
               ...(node === primaryHeading && theme.headingRule && !titleSlide
                 ? {
-                    borderBottom: `${theme.kind === 'ciment' ? '3px' : '1px'} solid ${theme.headingRule}`,
+                    borderBottom: `${theme.headingRuleWidth ?? (theme.kind === 'ciment' ? '3px' : '1px')} ${theme.headingRuleStyle ?? 'solid'} ${theme.headingRule}`,
                     paddingBottom: '.12em'
                   }
                 : {}),
+              ...(node === primaryHeading ? createThemeHeadingDecoration(theme) : {}),
               margin: 0,
               alignSelf: {
                 left: 'flex-start',
@@ -1298,13 +1318,11 @@ function createSlideVdomRaw(
                 fontFamily: safeFont(node.getAttribute?.('captionFont'), bodyFont),
                 fontSize: safeDimension(node.getAttribute?.('captionSize'), '1.1rem'),
                 lineHeight: 1.3,
-                left:
-                  normalizeSignedCssLength(node.getAttribute?.('captionOffsetX')) ?? '0px',
+                left: normalizeSignedCssLength(node.getAttribute?.('captionOffsetX')) ?? '0px',
                 margin: 0,
                 position: 'relative',
                 textAlign: pdfCaptionAlign,
-                top:
-                  normalizeSignedCssLength(node.getAttribute?.('captionOffsetY')) ?? '0px',
+                top: normalizeSignedCssLength(node.getAttribute?.('captionOffsetY')) ?? '0px',
                 width: '100%'
               }
             };
@@ -1319,9 +1337,7 @@ function createSlideVdomRaw(
               tag: 'figure',
               data: {
                 pdfCaptionHost: 'true',
-                ...(content.data?.pdfViewerScaleManaged
-                  ? { pdfViewerScaleManaged: 'true' }
-                  : {})
+                ...(content.data?.pdfViewerScaleManaged ? { pdfViewerScaleManaged: 'true' } : {})
               },
               style: {
                 alignSelf: 'center',
@@ -1614,12 +1630,12 @@ function createSlideVdomRaw(
           const revealTriggered =
             String(originalPlotStyle['animation-trigger'] ?? '').toLowerCase() === 'reveal';
           const plotExportStages = !['false', 'no', 'off', '0'].includes(
-            String(originalPlotStyle['export-stages'] ?? 'true').trim().toLowerCase()
+            String(originalPlotStyle['export-stages'] ?? 'true')
+              .trim()
+              .toLowerCase()
           );
           const chartRevealIndex =
-            exportSnapshot && !plotExportStages
-              ? Number.POSITIVE_INFINITY
-              : nodeRevealIndex;
+            exportSnapshot && !plotExportStages ? Number.POSITIVE_INFINITY : nodeRevealIndex;
           const statsStage = Math.max(
             0,
             Math.floor(Number(originalPlotStyle['stats-reveal-stage']) || 0)
@@ -1887,6 +1903,22 @@ function getLetterboxColor(background, fallback, surface) {
       255
     : 1;
   return `color-mix(in srgb, ${resolved} 86%, ${luminance < 0.35 ? 'white' : 'black'})`;
+}
+
+function createThemeHeadingDecoration(theme) {
+  return Object.fromEntries(
+    Object.entries({
+      background: theme.headingBackground,
+      borderBottom: theme.headingBorderBottom,
+      borderLeft: theme.headingBorderLeft,
+      borderRight: theme.headingBorderRight,
+      borderTop: theme.headingBorderTop,
+      backdropFilter: theme.headingBackdropFilter,
+      webkitBackdropFilter: theme.headingBackdropFilter,
+      boxShadow: theme.headingShadow,
+      padding: theme.headingPadding
+    }).filter(([, value]) => value !== undefined && value !== '')
+  );
 }
 
 function splitQuoteAttribution(text) {
@@ -2570,9 +2602,7 @@ function parseBlockScalePercent(value) {
 
 function normalizeImageSize(value) {
   const text = String(value ?? '').trim();
-  return /^(?:auto|\d+(?:\.\d+)?(?:px|rem|em|%|vw|vh|cqw|cqh))$/i.test(text)
-    ? text
-    : undefined;
+  return /^(?:auto|\d+(?:\.\d+)?(?:px|rem|em|%|vw|vh|cqw|cqh))$/i.test(text) ? text : undefined;
 }
 
 function parseInlineOffset(value) {
@@ -3240,10 +3270,43 @@ function cubicBezierPoint(a, c1, c2, b, t) {
 
 function createChartView(chart, theme) {
   return applyChartCaption(
-    applyChartHighlights(createChartViewRaw(chart, theme), chart, theme),
+    applyChartHighlights(
+      applyRegisteredPlotDimensions(createChartViewRaw(chart, theme), chart),
+      chart,
+      theme
+    ),
     chart,
     theme
   );
+}
+
+function applyRegisteredPlotDimensions(view, chart) {
+  if (!getPlotRenderer(chart.kind) || ['histogram', 'boxplot'].includes(chart.kind)) return view;
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const requestedWidth = safeDimension(style['plot-width'], '');
+  const requestedHeight = safeDimension(style['plot-height'], '');
+  if (!requestedWidth && !requestedHeight) return view;
+  const frame = findChartMarkupNode(view);
+  if (!frame) return view;
+  const dimensions = [
+    requestedWidth ? `width:min(100%, ${requestedWidth})!important` : '',
+    requestedHeight ? `height:${requestedHeight}!important` : ''
+  ]
+    .filter(Boolean)
+    .join(';');
+  frame.html = frame.html.replace(/<svg\b([^>]*)>/i, (_match, attributes) => {
+    const sized = /\sstyle="[^"]*"/i.test(attributes)
+      ? attributes.replace(/\sstyle="([^"]*)"/i, ` style="$1;${dimensions}"`)
+      : `${attributes} style="${dimensions}"`;
+    return `<svg${sized}>`;
+  });
+  view.style = {
+    ...view.style,
+    minWidth: 0,
+    ...(requestedWidth ? { maxWidth: '100%', width: requestedWidth } : {}),
+    ...(requestedHeight ? { height: requestedHeight } : {})
+  };
+  return view;
 }
 
 function applyChartCaption(view, chart, theme) {
@@ -3289,13 +3352,22 @@ function applyChartCaption(view, chart, theme) {
 
 function normalizeSignedCssLength(value) {
   const text = String(value ?? '').trim();
-  return /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|vw|vh|cqw|cqh)$/.test(text)
-    ? text
-    : undefined;
+  return /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|vw|vh|cqw|cqh)$/.test(text) ? text : undefined;
 }
 
 registerPlotRenderer('surface', createSurfaceView);
 registerPlotRenderer('heatmap', createHeatmapView);
+registerPlotRenderer('pie', createPieView);
+registerPlotRenderer('radar', createRadarView);
+registerPlotRenderer('polar', createPolarView);
+registerPlotRenderer('polar-function', createPolarFunctionView);
+registerPlotRenderer('ternary', createTernaryView);
+registerPlotRenderer('forest', createForestView);
+registerPlotRenderer('efficiency', createEfficiencyView);
+registerPlotRenderer('stacked-bar', createStackedBarView);
+registerPlotRenderer('ratio', createRatioView);
+registerPlotRenderer('roc', createRocView);
+registerPlotRenderer('corner', createCornerView);
 registerPlotRenderer('histogram', createHistogramView);
 registerPlotRenderer('boxplot', createBoxPlotView);
 registerPlotRenderer('contour', createContourView);
@@ -3310,6 +3382,1562 @@ registerPlotRenderer('streamline', createStreamlineView);
 registerPlotRenderer('stacked-histogram', createStackedHistogramView);
 registerPlotRenderer('standard-model', createStandardModelView);
 registerPlotRenderer('violin', createViolinView);
+registerPlotRenderer('qq', createQqView);
+registerPlotRenderer('ecdf', createEcdfView);
+registerPlotRenderer('precision-recall', createPrecisionRecallView);
+registerPlotRenderer('volcano', createVolcanoView);
+registerPlotRenderer('waterfall', createWaterfallView);
+registerPlotRenderer('sankey', createSankeyView);
+registerPlotRenderer('time-series', createTimeSeriesView);
+registerPlotRenderer('geographic', createGeographicView);
+
+function specialPlotFrame(chart, theme, body, ariaLabel, width = 845, height = 500) {
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const titleX = width / 2 + safeNumber(style['title-offset-x'], 0);
+  const titleY = 28 + safeNumber(style['title-offset-y'], 0);
+  const title = chart.title
+    ? `<text data-neopresent-special-title="true" x="${titleX}" y="${titleY}" fill="${safeColor(style['title-color'], theme.foreground)}" fill-opacity="${safeAlpha(style['title-alpha'] ?? 1)}" font-family="${safeFont(style['title-font'], 'system-ui, sans-serif')}" font-size="${Math.max(10, safeNumber(style['title-size'], 22))}" font-weight="700" text-anchor="middle">${renderSvgMath(chart.title)}</text>`
+    : '';
+  return {
+    html: `<svg aria-label="${ariaLabel}" viewBox="0 0 ${width} ${height}" style="height:auto;width:min(100%, ${width}px)" xmlns="http://www.w3.org/2000/svg">${title}<g data-neopresent-special-animation="${escapeSvgText(String((chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {}).animation ?? ''))}" style="${createSpecialPlotAnimation(chart, theme)}">${body}</g></svg>`,
+    style: { maxWidth: `${width}px`, minWidth: 0, width: '100%' }
+  };
+}
+
+function createSpecialPlotAnimation(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  if (!appearance.animation) return '';
+  const name = appearance.animation === 'draw' ? 'reveal-x' : appearance.animation;
+  const initial = appearance.animation === 'draw' ? 'clip-path:inset(0 100% 0 0);' : '';
+  return `${initial}animation:neopresent-chart-${name} ${appearance.animationDuration} ${appearance.animationEasing} ${appearance.animationDelay} both;transform-box:fill-box;transform-origin:center`;
+}
+
+function specialAnimation(item, appearance, origin = 'center') {
+  const requested = String(item?.animation || appearance.animation).toLowerCase();
+  if (!requested) return '';
+  const name = requested === 'fade' ? 'fade' : requested === 'rise' ? 'rise' : 'grow';
+  return `animation:neopresent-chart-${name} ${item?.animationDuration || appearance.animationDuration} ${item?.animationEasing || appearance.animationEasing} ${item?.animationDelay || appearance.animationDelay} both;transform-box:fill-box;transform-origin:${origin};`;
+}
+
+function createSpecialAxisLabel(text, axis, baseX, baseY, theme, style, marker = '') {
+  if (!text) return '';
+  const x = baseX + safeNumber(style[`${axis}-label-offset-x`], 0);
+  const y = baseY + safeNumber(style[`${axis}-label-offset-y`], 0);
+  const color = safeColor(style[`${axis}-label-color`], theme.foreground);
+  const alpha = safeAlpha(style[`${axis}-label-alpha`] ?? 1);
+  const font = safeFont(style[`${axis}-label-font`], 'system-ui, sans-serif');
+  const size = Math.max(10, safeNumber(style[`${axis}-label-size`], 20));
+  const rotation = axis === 'y' ? ` transform="rotate(-90 ${x} ${y})"` : '';
+  const markerAttribute = marker ? ` data-neopresent-${marker}-${axis}-label="true"` : '';
+  return `<text data-neopresent-special-${axis}-label="true"${markerAttribute} x="${x}" y="${y}" fill="${color}" fill-opacity="${alpha}" font-family="${font}" font-size="${size}" text-anchor="middle"${rotation}>${renderSvgMath(text)}</text>`;
+}
+
+function createScientificCartesianFrame(chart, theme, options) {
+  const width = 845,
+    height = 500;
+  const plot = { left: 92, top: 48, width: 680, height: 350 };
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const bottom = plot.top + plot.height;
+  const [xMinimum, xMaximum] = options.xDomain;
+  const [yMinimum, yMaximum] = options.yDomain;
+  const xFor = (value) =>
+    plot.left + ((value - xMinimum) / Math.max(xMaximum - xMinimum, Number.EPSILON)) * plot.width;
+  const yFor = (value) =>
+    bottom - ((value - yMinimum) / Math.max(yMaximum - yMinimum, Number.EPSILON)) * plot.height;
+  const xTicks = options.showXTicks === false ? [] : createScientificTicks(xMinimum, xMaximum, 6);
+  const yTicks = createScientificTicks(yMinimum, yMaximum, 6);
+  const grid = `${xTicks.map((tick) => `<path d="M ${xFor(tick)} ${plot.top} V ${bottom}" stroke="${theme.border}" opacity=".3" stroke-dasharray="4 6"/><text data-neopresent-cartesian-x-tick="${tick}" x="${xFor(tick)}" y="${bottom + 25}" fill="${theme.muted}" font-size="15" text-anchor="middle">${formatChartValue(tick)}</text>`).join('')}${yTicks.map((tick) => `<path d="M ${plot.left} ${yFor(tick)} H ${plot.left + plot.width}" stroke="${theme.border}" opacity=".3" stroke-dasharray="4 6"/><text data-neopresent-cartesian-y-tick="${tick}" x="${plot.left - 11}" y="${yFor(tick) + 5}" fill="${theme.muted}" font-size="15" text-anchor="end">${formatChartValue(tick)}</text>`).join('')}`;
+  const xLabelX = plot.left + plot.width / 2 + safeNumber(style['x-label-offset-x'], 0);
+  const xLabelY = 478 + safeNumber(style['x-label-offset-y'], 0);
+  const yLabelX = 24 + safeNumber(style['y-label-offset-x'], 0);
+  const yLabelY = plot.top + plot.height / 2 + safeNumber(style['y-label-offset-y'], 0);
+  const axes = `<path data-neopresent-cartesian-frame="true" d="M ${plot.left} ${plot.top} V ${bottom} H ${plot.left + plot.width} V ${plot.top} Z" fill="none" stroke="${theme.border}" stroke-width="2"/><text data-neopresent-cartesian-x-label="true" x="${xLabelX}" y="${xLabelY}" fill="${safeColor(style['x-label-color'], theme.foreground)}" fill-opacity="${safeAlpha(style['x-label-alpha'] ?? 1)}" font-family="${safeFont(style['x-label-font'], 'system-ui, sans-serif')}" font-size="${Math.max(10, safeNumber(style['x-label-size'], 20))}" text-anchor="middle">${renderSvgMath(options.xLabel)}</text><text data-neopresent-cartesian-y-label="true" x="${yLabelX}" y="${yLabelY}" fill="${safeColor(style['y-label-color'], theme.foreground)}" fill-opacity="${safeAlpha(style['y-label-alpha'] ?? 1)}" font-family="${safeFont(style['y-label-font'], 'system-ui, sans-serif')}" font-size="${Math.max(10, safeNumber(style['y-label-size'], 20))}" text-anchor="middle" transform="rotate(-90 ${yLabelX} ${yLabelY})">${renderSvgMath(options.yLabel)}</text>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${grid}${options.marks(xFor, yFor, plot)}${axes}`,
+    options.aria,
+    width,
+    height
+  );
+}
+
+function specialLegendEnabled(style, automatic = false) {
+  const value = String(style.legend ?? '')
+    .trim()
+    .toLowerCase();
+  if (['false', 'no', 'off', '0'].includes(value)) return false;
+  return isEnabled(value) || (!value && automatic);
+}
+
+function createSpecialLegend(items, theme, style = {}, options = {}) {
+  if (!items.length) return '';
+  const size = Math.max(10, safeNumber(style['legend-size'], 15));
+  const font = safeFont(style['legend-font'], 'system-ui, sans-serif');
+  const columns = Math.max(
+    1,
+    Math.min(items.length, Math.trunc(safeNumber(style['legend-columns'], 1)))
+  );
+  const rowCount = Math.ceil(items.length / columns);
+  const requestedColumnWidth = Number(options.columnWidth);
+  const longestLabel = Math.max(
+    0,
+    ...items.map((item) => String(item.label ?? '').replace(/\$[^$]*\$/g, 'x').length)
+  );
+  const columnWidth = Math.max(
+    120,
+    Number.isFinite(requestedColumnWidth) ? requestedColumnWidth : 210,
+    Math.ceil(longestLabel * size * 0.62) + 44
+  );
+  const width = safeNumber(options.width, 845);
+  const height = safeNumber(options.height, 500);
+  const position = String(style['legend-position'] ?? 'top-right')
+    .trim()
+    .toLowerCase();
+  const rowsHeight = Math.max(1, rowCount) * (size + 10);
+  const legendWidth = columnWidth * columns;
+  const left = safeNumber(options.legendLeft, 105);
+  const right = Math.max(left, width - legendWidth - 20);
+  const center = Math.max(left, (width - legendWidth) / 2);
+  const positions = {
+    'top-left': [left, 72],
+    'top-center': [center, 72],
+    'top-right': [right, 72],
+    'middle-left': [left, height * 0.5 - rowsHeight * 0.5],
+    'middle-center': [center, height * 0.5 - rowsHeight * 0.5],
+    'middle-right': [right, height * 0.5 - rowsHeight * 0.5],
+    'bottom-left': [left, height - rowsHeight - 55],
+    'bottom-center': [center, height - rowsHeight - 55],
+    'bottom-right': [right, height - rowsHeight - 55]
+  };
+  const [positionX, positionY] = positions[position] ?? positions['top-right'];
+  const coordinate = (value, extent, fallback) => {
+    const source = String(value ?? '').trim();
+    if (!source) return fallback;
+    const parsed = Number(source);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.abs(parsed) <= 1 ? parsed * extent : parsed;
+  };
+  const x =
+    coordinate(style['legend-x'], width, safeNumber(options.x, positionX)) +
+    safeNumber(style['legend-offset-x'], 0);
+  const y =
+    coordinate(style['legend-y'], height, safeNumber(options.y, positionY)) +
+    safeNumber(style['legend-offset-y'], 0);
+  const color = safeColor(style['legend-color'], theme.foreground);
+  const alpha = Math.max(0, Math.min(1, safeNumber(style['legend-alpha'], 1)));
+  return `<g data-neopresent-special-legend="true" opacity="${alpha}">${items
+    .map((item, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const itemX = x + column * columnWidth;
+      const rowY = y + row * (size + 10);
+      return `<g data-neopresent-special-legend-item="${index}"><path d="M ${itemX} ${rowY - 5} H ${itemX + 22}" stroke="${item.color}" stroke-width="${item.width ?? 4}"/><circle cx="${itemX + 11}" cy="${rowY - 5}" r="${item.radius ?? 4}" fill="${item.color}"/><text x="${itemX + 30}" y="${rowY}" fill="${color}" font-family="${font}" font-size="${size}">${escapeSvgText(item.label)}</text></g>`;
+    })
+    .join('')}</g>`;
+}
+
+function createStackedBarView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const series = getRenderableSeries(chart).filter((item) => item.visible);
+  const count = Math.max(0, ...series.map((item) => item.values.length));
+  const labels = chart.labels?.length === count ? chart.labels : (series[0]?.labels ?? []);
+  const normalized =
+    isEnabled(style['stack-bar-normalized']) ||
+    String(chart.getAttribute?.('requestedType') ?? '').includes('normalized');
+  const left = 95,
+    top = 45,
+    plotWidth = 650,
+    plotHeight = 360,
+    bottom = top + plotHeight;
+  const totals = Array.from({ length: count }, (_, i) =>
+    series.reduce((sum, item) => sum + Math.max(0, item.values[i] ?? 0), 0)
+  );
+  const maximum = normalized ? 1 : Math.max(1, ...totals) * 1.1;
+  const colors = ['#38bdf8', '#f97316', '#a78bfa', '#22c55e', '#f43f5e', '#facc15'];
+  const slot = plotWidth / Math.max(count, 1);
+  const bars = Array.from({ length: count }, (_, category) => {
+    let cumulative = 0;
+    return series
+      .map((item, seriesIndex) => {
+        const raw = Math.max(0, item.values[category] ?? 0);
+        const value = normalized && totals[category] > 0 ? raw / totals[category] : raw;
+        const y1 = bottom - (cumulative / maximum) * plotHeight;
+        cumulative += value;
+        const y2 = bottom - (cumulative / maximum) * plotHeight;
+        const x = left + category * slot + slot * 0.16;
+        const color = safeColor(item.color, colors[seriesIndex % colors.length]);
+        const tip = `${item.name} · ${labels[category] ?? category + 1}: ${formatChartValue(raw)}`;
+        return `<rect data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="stacked-bar" x="${x}" y="${y2}" width="${slot * 0.68}" height="${Math.max(1, y1 - y2)}" fill="${color}" style="${specialAnimation(item, appearance, 'center bottom')}"><title>${escapeSvgText(tip)}</title></rect>`;
+      })
+      .join('');
+  }).join('');
+  const ticks = normalized
+    ? Array.from({ length: 6 }, (_, index) => index / 5)
+    : createScientificTicks(0, maximum, 5);
+  const grid = ticks
+    .map((tick) => {
+      const y = bottom - (tick / maximum) * plotHeight;
+      const label = normalized ? `${formatChartValue(tick * 100)}%` : formatChartValue(tick);
+      return `<path d="M ${left} ${y} H ${left + plotWidth}" stroke="${theme.border}" stroke-width="1" stroke-dasharray="4 6" opacity=".42"/><text x="${left - 12}" y="${y + 5}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="17" text-anchor="end">${label}</text>`;
+    })
+    .join('');
+  const xTicks = Array.from(labels)
+    .map(
+      (label, index) =>
+        `<text x="${left + (index + 0.5) * slot}" y="${bottom + 28}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="18" text-anchor="middle">${escapeSvgText(label)}</text>`
+    )
+    .join('');
+  const frame = `<path d="M ${left} ${top} V ${bottom} H ${left + plotWidth} V ${top} Z" fill="none" stroke="${theme.border}" stroke-width="2"/>`;
+  const yLabel = chart.yLabel || (normalized ? 'Composition' : 'Value');
+  const axisLabels = `${createSpecialAxisLabel(chart.xLabel, 'x', left + plotWidth / 2, 480, theme, style)}${createSpecialAxisLabel(yLabel, 'y', 24, top + plotHeight / 2, theme, style)}`;
+  const legend = specialLegendEnabled(style, true)
+    ? createSpecialLegend(
+        series.map((item, index) => ({
+          label: item.name,
+          color: safeColor(item.color, colors[index % colors.length])
+        })),
+        theme,
+        style
+      )
+    : '';
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${grid}${frame}${bars}${xTicks}${axisLabels}${legend}`,
+    'Stacked bar chart'
+  );
+}
+
+function createEfficiencyView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const passed = Array.from(chart.values ?? []);
+  const totals = String(style['efficiency-total'] ?? '')
+    .split(',')
+    .map(Number);
+  const labels = chart.labels ?? [];
+  const confidence = parseEfficiencyConfidence(style['efficiency-confidence']);
+  const z = efficiencyConfidenceZ(confidence);
+  const left = 105,
+    top = 45,
+    width = 650,
+    height = 350,
+    bottom = top + height;
+  const points = passed
+    .map((value, i) => {
+      const total = totals[i] ?? 0;
+      const efficiency = total > 0 ? Math.max(0, Math.min(1, value / total)) : 0;
+      const denominator = 1 + (z * z) / Math.max(total, 1);
+      const center = (efficiency + (z * z) / (2 * Math.max(total, 1))) / denominator;
+      const half =
+        total > 0
+          ? (z *
+              Math.sqrt((efficiency * (1 - efficiency)) / total + (z * z) / (4 * total * total))) /
+            denominator
+          : 0;
+      const lower = Math.max(0, center - half);
+      const upper = Math.min(1, center + half);
+      const x = left + ((i + 0.5) / passed.length) * width;
+      const y = bottom - efficiency * height;
+      const lowY = bottom - lower * height;
+      const highY = bottom - upper * height;
+      const tip = `${labels[i] ?? i + 1}: ${formatChartValue(efficiency * 100)}% (${value}/${total}); ${formatChartValue(confidence * 100)}% Wilson interval ${formatChartValue(lower * 100)}–${formatChartValue(upper * 100)}%`;
+      return `<g style="${createDataAnimation(appearance, i, passed.length)}"><path d="M ${x} ${highY} V ${lowY} M ${x - 6} ${highY} H ${x + 6} M ${x - 6} ${lowY} H ${x + 6}" stroke="${appearance.dataColor}" stroke-width="2"/><circle data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="efficiency" cx="${x}" cy="${y}" r="6" fill="${appearance.dataColor}"><title>${escapeSvgText(tip)}</title></circle></g>`;
+    })
+    .join('');
+  const ticks = Array.from({ length: 6 }, (_, index) => index / 5);
+  const grid = ticks
+    .map((tick) => {
+      const y = bottom - tick * height;
+      return `<path d="M ${left} ${y} H ${left + width}" stroke="${theme.border}" stroke-width="1" stroke-dasharray="4 6" opacity=".45"/><text x="${left - 12}" y="${y + 5}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="17" text-anchor="end">${formatChartValue(tick)}</text>`;
+    })
+    .join('');
+  const xTicks = labels
+    .map(
+      (label, i) =>
+        `<text x="${left + ((i + 0.5) / passed.length) * width}" y="${bottom + 29}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="18" text-anchor="middle">${escapeSvgText(label)}</text>`
+    )
+    .join('');
+  const yLabel = chart.yLabel || 'Efficiency';
+  const axisLabels = `${createSpecialAxisLabel(chart.xLabel, 'x', left + width / 2, 480, theme, style)}${createSpecialAxisLabel(yLabel, 'y', 24, top + height / 2, theme, style)}`;
+  const frame = `<path d="M ${left} ${top} V ${bottom} H ${left + width} V ${top} Z" fill="none" stroke="${theme.border}" stroke-width="2"/>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${grid}${frame}${xTicks}${axisLabels}${points}`,
+    'Efficiency plot'
+  );
+}
+
+function parseEfficiencyConfidence(value) {
+  const text = String(value ?? '68.27')
+    .trim()
+    .replace(/%$/, '');
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed)) return 0.6827;
+  return Math.max(0.5, Math.min(0.999, parsed > 1 ? parsed / 100 : parsed));
+}
+
+function efficiencyConfidenceZ(confidence) {
+  if (confidence >= 0.99) return 2.5758;
+  if (confidence >= 0.95) return 1.96;
+  if (confidence >= 0.9) return 1.6449;
+  return 1;
+}
+
+function createPolarView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const values = Array.from(chart.values ?? []);
+  const labels = chart.labels ?? [];
+  const maximum = safeOptionalNumber(style['polar-max']) ?? Math.max(1, ...values) * 1.1;
+  const levels = Math.max(2, Math.min(8, Math.trunc(safeNumber(style['polar-grid-levels'], 5))));
+  const gridColor = safeColor(style['polar-grid-color'], theme.border);
+  const labelColor = safeColor(style['polar-label-color'], theme.foreground);
+  const labelSize = Math.max(10, safeNumber(style['polar-label-size'], 17));
+  const startAngle = safeNumber(style['polar-start-angle'], -90);
+  const cx = 420;
+  const cy = 250;
+  const radius = 165;
+  const angleFor = (index) => startAngle + (index * 360) / Math.max(values.length, 1);
+  const points = values.map((value, index) =>
+    polarPoint(cx, cy, (radius * Math.max(0, value)) / maximum, angleFor(index))
+  );
+  const rings = Array.from({ length: levels }, (_, index) => {
+    const level = index + 1;
+    const ringRadius = (radius * level) / levels;
+    const tick = (maximum * level) / levels;
+    return `<circle cx="${cx}" cy="${cy}" r="${ringRadius}" fill="none" stroke="${gridColor}" stroke-width="1" opacity="${level === levels ? 0.75 : 0.45}"/><text data-neopresent-polar-tick="${level}" x="${cx + 7}" y="${cy - ringRadius + 15}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="14">${formatChartValue(tick)}</text>`;
+  }).join('');
+  const spokes = values
+    .map((_, index) => {
+      const end = polarPoint(cx, cy, radius, angleFor(index));
+      return `<path data-neopresent-polar-axis="${index}" d="M ${cx} ${cy} L ${end.x} ${end.y}" stroke="${gridColor}" stroke-width="1" opacity=".65"/>`;
+    })
+    .join('');
+  const categoryLabels = values
+    .map((_, index) => {
+      const point = polarPoint(cx, cy, radius * 1.16, angleFor(index));
+      const anchor = Math.abs(point.x - cx) < 8 ? 'middle' : point.x < cx ? 'end' : 'start';
+      return `<text data-neopresent-polar-label="${index}" x="${point.x}" y="${point.y}" fill="${labelColor}" font-family="system-ui,sans-serif" font-size="${labelSize}" font-weight="600" text-anchor="${anchor}" dominant-baseline="middle">${escapeSvgText(labels[index] ?? String(index + 1))}</text>`;
+    })
+    .join('');
+  const marks = points
+    .map((point, index) => {
+      const tip = `${labels[index] ?? index + 1}: ${formatChartValue(values[index])}`;
+      return `<circle data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="polar" cx="${point.x}" cy="${point.y}" r="6" fill="${appearance.dataColor}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tip)}</title></circle>`;
+    })
+    .join('');
+  const radialLabel = chart.yLabel
+    ? `<text data-neopresent-special-y-label="true" x="${cx + 25 + safeNumber(style['y-label-offset-x'], 0)}" y="${cy - radius - 18 + safeNumber(style['y-label-offset-y'], 0)}" fill="${safeColor(style['y-label-color'], labelColor)}" fill-opacity="${safeAlpha(style['y-label-alpha'] ?? 1)}" font-family="${safeFont(style['y-label-font'], 'system-ui, sans-serif')}" font-size="${Math.max(10, safeNumber(style['y-label-size'], 17))}">${renderSvgMath(chart.yLabel)}</text>`
+    : '';
+  const polygon = `<polygon points="${points.map((point) => `${point.x},${point.y}`).join(' ')}" fill="${appearance.dataColor}" fill-opacity=".2" stroke="${appearance.dataColor}" stroke-width="3" stroke-linejoin="round" style="${specialAnimation(null, appearance, `${cx}px ${cy}px`)}"/>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${rings}${spokes}${polygon}${marks}${categoryLabels}${radialLabel}`,
+    'Polar plot'
+  );
+}
+
+function createPolarFunctionView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const thetaValues = String(style['polar-theta-values'] ?? '')
+    .split(',')
+    .map(Number)
+    .filter(Number.isFinite);
+  const radiusValues = String(style['polar-radius-values'] ?? '')
+    .split(',')
+    .map(Number)
+    .filter(Number.isFinite);
+  const count = Math.min(chart.xValues?.length ?? 0, chart.values?.length ?? 0);
+  const maximum =
+    safeOptionalNumber(style['polar-max']) ??
+    Math.max(
+      1,
+      ...radiusValues.map(Math.abs),
+      ...chart.xValues.map(Math.abs),
+      ...chart.values.map(Math.abs)
+    ) * 1.08;
+  const levels = Math.max(2, Math.min(10, Math.trunc(safeNumber(style['polar-grid-levels'], 5))));
+  const cx = 422;
+  const cy = 255;
+  const plotRadius = 175;
+  const scale = plotRadius / Math.max(maximum, Number.EPSILON);
+  const gridColor = safeColor(style['polar-grid-color'], theme.border);
+  const labelColor = safeColor(style['polar-label-color'], theme.foreground);
+  const labelSize = Math.max(10, safeNumber(style['polar-label-size'], 15));
+  const rings = Array.from({ length: levels }, (_, index) => {
+    const fraction = (index + 1) / levels;
+    return `<circle cx="${cx}" cy="${cy}" r="${plotRadius * fraction}" fill="none" stroke="${gridColor}" opacity=".45"/><text x="${cx + 6}" y="${cy - plotRadius * fraction + 14}" fill="${theme.muted}" font-size="13">${formatChartValue(maximum * fraction)}</text>`;
+  }).join('');
+  const spokes = Array.from({ length: 8 }, (_, index) => {
+    const theta = (index * Math.PI) / 4;
+    const x = cx + plotRadius * Math.cos(theta);
+    const y = cy - plotRadius * Math.sin(theta);
+    const labelX = cx + plotRadius * 1.12 * Math.cos(theta);
+    const labelY = cy - plotRadius * 1.12 * Math.sin(theta);
+    return `<path d="M ${cx} ${cy} L ${x} ${y}" stroke="${gridColor}" opacity=".55"/><text x="${labelX}" y="${labelY}" fill="${labelColor}" font-size="${labelSize}" text-anchor="middle" dominant-baseline="middle">${index * 45}°</text>`;
+  }).join('');
+  const points = Array.from({ length: count }, (_, index) => ({
+    x: cx + chart.xValues[index] * scale,
+    y: cy - chart.values[index] * scale,
+    theta: thetaValues[index],
+    radius: radiusValues[index]
+  }));
+  const path = `<polyline data-neopresent-mark-kind="polar-function" points="${points.map((point) => `${point.x},${point.y}`).join(' ')}" fill="none" stroke="${appearance.dataColor}" stroke-width="${Math.max(1, appearance.dataSize)}" stroke-linejoin="round" style="${specialAnimation(null, appearance)}"/>`;
+  const hoverStride = Math.max(1, Math.floor(count / 80));
+  const hover = points
+    .map((point, index) => {
+      if (index % hoverStride !== 0 && index !== count - 1) return '';
+      const tip = `θ=${formatChartValue(point.theta)} rad; r=${formatChartValue(point.radius)}`;
+      return `<circle data-neopresent-mark-kind="polar-function-point" data-neopresent-tooltip="${escapeSvgText(tip)}" cx="${point.x}" cy="${point.y}" r="7" fill="${appearance.dataColor}" fill-opacity=".001"><title>${escapeSvgText(tip)}</title></circle>`;
+    })
+    .join('');
+  const legend = specialLegendEnabled(style)
+    ? createSpecialLegend(
+        [
+          {
+            label: String(style['legend-labels'] || style.function || 'r(θ)'),
+            color: appearance.dataColor
+          }
+        ],
+        theme,
+        style
+      )
+    : '';
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${rings}${spokes}${path}${hover}${legend}`,
+    'Polar function plot'
+  );
+}
+
+function createTernaryView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const a = chart.xValues ?? [];
+  const b = chart.getAttribute?.('heatmapYValues') ?? [];
+  const c = chart.values ?? [];
+  const A = { x: 420, y: 52 },
+    B = { x: 115, y: 415 },
+    C = { x: 725, y: 415 };
+  const levels = Math.max(2, Math.min(10, Math.trunc(safeNumber(style['ternary-grid-levels'], 5))));
+  const mix = (p, q, fraction) => ({
+    x: p.x * fraction + q.x * (1 - fraction),
+    y: p.y * fraction + q.y * (1 - fraction)
+  });
+  const grid = Array.from({ length: levels - 1 }, (_, index) => {
+    const fraction = (index + 1) / levels;
+    const ab = mix(A, B, fraction),
+      ac = mix(A, C, fraction);
+    const ba = mix(B, A, fraction),
+      bc = mix(B, C, fraction);
+    const ca = mix(C, A, fraction),
+      cb = mix(C, B, fraction);
+    return `<g data-neopresent-ternary-grid="${index + 1}" stroke="${theme.border}" stroke-width="1" opacity=".42"><path d="M ${ab.x} ${ab.y} L ${ac.x} ${ac.y}"/><path d="M ${ba.x} ${ba.y} L ${bc.x} ${bc.y}"/><path d="M ${ca.x} ${ca.y} L ${cb.x} ${cb.y}"/></g><text x="${ab.x - 9}" y="${ab.y + 4}" fill="${theme.muted}" font-size="13" text-anchor="end">${formatChartValue(fraction * 100)}%</text>`;
+  }).join('');
+  const points = Array.from({ length: Math.min(a.length, b.length, c.length) }, (_, index) => {
+    const sum = a[index] + b[index] + c[index] || 1;
+    return {
+      x: (a[index] * A.x + b[index] * B.x + c[index] * C.x) / sum,
+      y: (a[index] * A.y + b[index] * B.y + c[index] * C.y) / sum,
+      index,
+      sum
+    };
+  });
+  const marks = points
+    .map(({ x, y, index, sum }) => {
+      const tip = `${chart.labels?.[index] ?? index + 1}: ${formatChartValue((a[index] / sum) * 100)}% A, ${formatChartValue((b[index] / sum) * 100)}% B, ${formatChartValue((c[index] / sum) * 100)}% C`;
+      return `<circle data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="ternary" cx="${x}" cy="${y}" r="7" fill="${appearance.dataColor}" stroke="${theme.background}" stroke-width="1" style="${createDataAnimation(appearance, index, points.length, `${x}px ${y}px`)}"><title>${escapeSvgText(tip)}</title></circle>`;
+    })
+    .join('');
+  const labels = `<text data-neopresent-ternary-label="a" x="${A.x}" y="34" text-anchor="middle" fill="${theme.foreground}" font-size="18" font-weight="700">${escapeSvgText(style['ternary-a-label'] ?? 'A')}</text><text data-neopresent-ternary-label="b" x="${B.x - 10}" y="${B.y + 27}" text-anchor="end" fill="${theme.foreground}" font-size="18" font-weight="700">${escapeSvgText(style['ternary-b-label'] ?? 'B')}</text><text data-neopresent-ternary-label="c" x="${C.x + 10}" y="${C.y + 27}" fill="${theme.foreground}" font-size="18" font-weight="700">${escapeSvgText(style['ternary-c-label'] ?? 'C')}</text>`;
+  const frameAnimation =
+    appearance.animation === 'draw'
+      ? `stroke-dasharray:1;stroke-dashoffset:1;animation:neopresent-chart-draw ${appearance.animationDuration} ${appearance.animationEasing} ${appearance.animationDelay} both`
+      : '';
+  const frame = `<polygon points="${A.x},${A.y} ${B.x},${B.y} ${C.x},${C.y}" pathLength="1" fill="none" stroke="${theme.border}" stroke-width="2" style="${frameAnimation}"/>`;
+  return specialPlotFrame(chart, theme, `${grid}${frame}${labels}${marks}`, 'Ternary plot');
+}
+
+function createForestView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const values = chart.values ?? [];
+  const asymmetric = chart.getAttribute?.('asymmetricErrors');
+  const lowerErrors = asymmetric?.lower ?? chart.errorValues ?? [];
+  const upperErrors = asymmetric?.upper ?? chart.errorValues ?? [];
+  const minima = values.map((value, index) => value - (lowerErrors[index] ?? 0));
+  const maxima = values.map((value, index) => value + (upperErrors[index] ?? 0));
+  const reference = safeNumber(style['forest-zero'], 0);
+  const dataMinimum = Math.min(reference, ...minima);
+  const dataMaximum = Math.max(reference, ...maxima);
+  const padding = Math.max((dataMaximum - dataMinimum) * 0.1, 0.1);
+  const minimum = appearance.xMin ?? dataMinimum - padding;
+  const maximum = appearance.xMax ?? dataMaximum + padding;
+  const left = 190,
+    width = 555,
+    top = 68,
+    rowHeight = 52;
+  const plotBottom = top + Math.max(1, values.length - 1) * rowHeight + 30;
+  const height = Math.max(330, plotBottom + 75);
+  const xFor = (value) =>
+    left + ((value - minimum) / Math.max(maximum - minimum, Number.EPSILON)) * width;
+  const ticks = createScientificTicks(minimum, maximum, 5);
+  const grid = ticks
+    .map((tick) => {
+      const x = xFor(tick);
+      return `<path d="M ${x} 48 V ${plotBottom}" stroke="${theme.border}" stroke-width="1" stroke-dasharray="4 6" opacity=".38"/><text x="${x}" y="${plotBottom + 27}" fill="${theme.muted}" font-size="16" text-anchor="middle">${formatChartValue(tick)}</text>`;
+    })
+    .join('');
+  const rows = values
+    .map((value, index) => {
+      const y = top + index * rowHeight;
+      const lower = minima[index],
+        upper = maxima[index];
+      const tip = `${chart.labels?.[index] ?? index + 1}: ${formatChartValue(value)} [${formatChartValue(lower)}, ${formatChartValue(upper)}]`;
+      return `<path data-neopresent-forest-y-tick="${index}" d="M ${left - 7} ${y} H ${left}" stroke="${theme.border}" stroke-width="2"/><text data-neopresent-forest-label="${index}" x="${left - 16}" y="${y + 5}" text-anchor="end" fill="${theme.foreground}" font-size="17">${escapeSvgText(chart.labels?.[index] ?? String(index + 1))}</text><path d="M ${xFor(lower)} ${y} H ${xFor(upper)} M ${xFor(lower)} ${y - 6} V ${y + 6} M ${xFor(upper)} ${y - 6} V ${y + 6}" stroke="${appearance.dataColor}" stroke-width="3"/><circle data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="forest" cx="${xFor(value)}" cy="${y}" r="6" fill="${appearance.dataColor}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tip)}</title></circle>`;
+    })
+    .join('');
+  const referenceLine = `<path data-neopresent-forest-reference="${reference}" d="M ${xFor(reference)} 48 V ${plotBottom}" stroke="${theme.muted}" stroke-width="2" stroke-dasharray="7 6"/>`;
+  const xLabel = chart.xLabel || 'Estimate';
+  const yLabel = chart.yLabel || 'Study';
+  const axisLabels = `${createSpecialAxisLabel(xLabel, 'x', left + width / 2, plotBottom + 52, theme, style, 'forest')}${createSpecialAxisLabel(yLabel, 'y', 38, (48 + plotBottom) / 2, theme, style, 'forest')}`;
+  const axes = `<path data-neopresent-forest-x-axis="true" d="M ${left} ${plotBottom} H ${left + width}" stroke="${theme.border}" stroke-width="2"/><path data-neopresent-forest-y-axis="true" d="M ${left} 48 V ${plotBottom}" stroke="${theme.border}" stroke-width="2"/>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${grid}${referenceLine}${axes}${rows}${axisLabels}`,
+    'Forest plot',
+    845,
+    height
+  );
+}
+
+function inverseNormalProbability(probability) {
+  const p = Math.max(1e-12, Math.min(1 - 1e-12, probability));
+  const a = [
+    -39.6968302866538, 220.946098424521, -275.928510446969, 138.357751867269, -30.6647980661472,
+    2.50662827745924
+  ];
+  const b = [
+    -54.4760987982241, 161.585836858041, -155.698979859887, 66.8013118877197, -13.2806815528857
+  ];
+  const c = [
+    -0.00778489400243029, -0.322396458041136, -2.40075827716184, -2.54973253934373,
+    4.37466414146497, 2.93816398269878
+  ];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742];
+  if (p < 0.02425) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+  if (p > 0.97575) return -inverseNormalProbability(1 - p);
+  const q = p - 0.5,
+    r = q * q;
+  return (
+    ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) /
+    (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+  );
+}
+
+function createQqView(chart, theme) {
+  const values = [...(chart.values ?? [])].filter(Number.isFinite).sort((a, b) => a - b);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const theoretical = values.map((_, index) =>
+    inverseNormalProbability((index + 0.5) / values.length)
+  );
+  const xDomain = numericDomain(theoretical),
+    yDomain = numericDomain(values);
+  return createScientificCartesianFrame(chart, theme, {
+    aria: 'QQ plot',
+    xDomain,
+    yDomain,
+    xLabel: chart.xLabel || 'Theoretical quantile',
+    yLabel: chart.yLabel || 'Sample quantile',
+    marks: (xFor, yFor) => {
+      const slope = (yDomain[1] - yDomain[0]) / (xDomain[1] - xDomain[0]);
+      const reference = `<path d="M ${xFor(xDomain[0])} ${yFor(yDomain[0])} L ${xFor(xDomain[1])} ${yFor(yDomain[0] + slope * (xDomain[1] - xDomain[0]))}" stroke="${theme.muted}" stroke-width="2" stroke-dasharray="7 6"/>`;
+      const legend = specialLegendEnabled(style)
+        ? createSpecialLegend(
+            [{ label: String(style['legend-labels'] || 'Sample quantiles'), color: theme.accent }],
+            theme,
+            style
+          )
+        : '';
+      return (
+        legend +
+        (reference +
+          values
+            .map(
+              (value, index) =>
+                `<circle data-neopresent-mark-kind="qq" data-neopresent-tooltip="Theoretical: ${formatChartValue(theoretical[index])}; sample: ${formatChartValue(value)}" cx="${xFor(theoretical[index])}" cy="${yFor(value)}" r="5" fill="${theme.accent}"><title>Theoretical: ${formatChartValue(theoretical[index])}; sample: ${formatChartValue(value)}</title></circle>`
+            )
+            .join(''))
+      );
+    }
+  });
+}
+
+function createEcdfView(chart, theme) {
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const complement = String(style['ecdf-complement'] ?? 'false').toLowerCase() === 'true';
+  const showPoints = isEnabled(style['ecdf-points']);
+  const pointSize = Math.max(2, safeNumber(style['ecdf-point-size'], 5));
+  const suppliedEvents = String(style['survival-events'] ?? '')
+    .split(',')
+    .map((value) => Number(value.trim()));
+  const rawValues = chart.values ?? [];
+  const hasEvents = complement && suppliedEvents.length === rawValues.length;
+  const showConfidence = hasEvents && isEnabled(style['survival-confidence']);
+  const confidenceLevel = parseEfficiencyConfidence(style['survival-confidence-level'] ?? '95');
+  const confidenceZ = inverseNormalProbability((1 + confidenceLevel) / 2);
+  const records = rawValues
+    .map((value, index) => ({ value, event: hasEvents ? suppliedEvents[index] === 1 : true }))
+    .filter((item) => Number.isFinite(item.value))
+    .sort((a, b) => a.value - b.value);
+  const values = records.map((item) => item.value);
+  let survival = 1;
+  let greenwood = 0;
+  let atRisk = records.length;
+  const estimates = [];
+  for (let index = 0; index < records.length;) {
+    const value = records[index].value;
+    let deaths = 0;
+    let removed = 0;
+    while (index < records.length && records[index].value === value) {
+      deaths += records[index].event ? 1 : 0;
+      removed += 1;
+      index += 1;
+    }
+    if (complement) {
+      survival *= atRisk > 0 ? 1 - deaths / atRisk : 1;
+      if (deaths > 0 && atRisk > deaths) greenwood += deaths / (atRisk * (atRisk - deaths));
+    }
+    const probability = complement ? survival : index / records.length;
+    const interval = kaplanMeierInterval(probability, greenwood, confidenceZ);
+    estimates.push({ value, probability, deaths, ...interval });
+    atRisk -= removed;
+  }
+  return createScientificCartesianFrame(chart, theme, {
+    aria: complement ? 'Survival curve' : 'ECDF plot',
+    xDomain: numericDomain(values),
+    yDomain: [0, 1],
+    xLabel: chart.xLabel || 'Value',
+    yLabel: chart.yLabel || (complement ? 'Survival probability' : 'Cumulative probability'),
+    marks: (xFor, yFor) => {
+      const points = estimates.flatMap((estimate, index) => {
+        const previous = index === 0 ? (complement ? 1 : 0) : estimates[index - 1].probability;
+        return [
+          [estimate.value, previous],
+          [estimate.value, estimate.probability]
+        ];
+      });
+      const markers = estimates
+        .map((estimate) => {
+          const tip = `${complement ? 'Survival' : 'ECDF'} · ${formatChartValue(estimate.value)}: ${formatChartValue(estimate.probability)}`;
+          return `<circle data-neopresent-mark-kind="${complement ? 'survival-point' : 'ecdf-point'}" data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-hover-target="true" cx="${xFor(estimate.value)}" cy="${yFor(estimate.probability)}" r="${showPoints ? pointSize : Math.max(9, pointSize)}" fill="${theme.accent}" fill-opacity="${showPoints ? 1 : 0.001}" stroke="none" pointer-events="all"><title>${escapeSvgText(tip)}</title></circle>`;
+        })
+        .join('');
+      const confidenceUpper = estimates.flatMap((estimate, index) => [
+        [estimate.value, index === 0 ? 1 : estimates[index - 1].upper],
+        [estimate.value, estimate.upper]
+      ]);
+      const confidenceLower = estimates.flatMap((estimate, index) => [
+        [estimate.value, index === 0 ? 1 : estimates[index - 1].lower],
+        [estimate.value, estimate.lower]
+      ]);
+      const confidenceBand = showConfidence
+        ? `<path data-neopresent-mark-kind="survival-confidence" d="M ${confidenceUpper
+            .map(([value, probability]) => `${xFor(value)} ${yFor(probability)}`)
+            .join(' L ')} L ${[...confidenceLower]
+            .reverse()
+            .map(([value, probability]) => `${xFor(value)} ${yFor(probability)}`)
+            .join(
+              ' L '
+            )} Z" fill="${safeColor(style['survival-confidence-color'], theme.accent)}" opacity="${safeAlpha(style['survival-confidence-alpha'] ?? '.18')}"/>`
+        : '';
+      const censorMarks = hasEvents
+        ? records
+            .filter((record) => !record.event)
+            .map((record) => {
+              const estimate = [...estimates].reverse().find((item) => item.value <= record.value);
+              const probability = estimate?.probability ?? 1;
+              const x = xFor(record.value);
+              const y = yFor(probability);
+              const tip = `Censored · ${formatChartValue(record.value)}; survival ${formatChartValue(probability)}`;
+              return `<path data-neopresent-mark-kind="survival-censored" data-neopresent-tooltip="${escapeSvgText(tip)}" d="M ${x} ${y - 6} V ${y + 6}" stroke="${theme.accent}" stroke-width="2"><title>${escapeSvgText(tip)}</title></path>`;
+            })
+            .join('')
+        : '';
+      const hoverSegments = points
+        .slice(1)
+        .map((point, index) => {
+          const previous = points[index];
+          const sampleIndex = Math.min(estimates.length - 1, Math.floor((index + 1) / 2));
+          const estimate = estimates[sampleIndex];
+          const tip = `${complement ? 'Survival' : 'ECDF'} · ${formatChartValue(estimate.value)}: ${formatChartValue(estimate.probability)}`;
+          return `<path data-neopresent-mark-kind="${complement ? 'survival-segment' : 'ecdf-segment'}" data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-hover-target="true" d="M ${xFor(previous[0])} ${yFor(previous[1])} L ${xFor(point[0])} ${yFor(point[1])}" fill="none" stroke="${theme.accent}" stroke-opacity=".001" stroke-width="16" pointer-events="stroke"><title>${escapeSvgText(tip)}</title></path>`;
+        })
+        .join('');
+      const legend = specialLegendEnabled(style)
+        ? createSpecialLegend(
+            [
+              {
+                label: String(style['legend-labels'] || (complement ? 'Survival' : 'ECDF')),
+                color: theme.accent
+              }
+            ],
+            theme,
+            style
+          )
+        : '';
+      return `${confidenceBand}<polyline data-neopresent-mark-kind="${complement ? 'survival' : 'ecdf'}" points="${points.map(([x, y]) => `${xFor(x)},${yFor(y)}`).join(' ')}" fill="none" stroke="${theme.accent}" stroke-width="3"/>${hoverSegments}${markers}${censorMarks}${legend}`;
+    }
+  });
+}
+
+function kaplanMeierInterval(survival, greenwood, z) {
+  if (survival <= 0) return { lower: 0, upper: 0 };
+  if (survival >= 1 || greenwood <= 0) return { lower: survival, upper: survival };
+  const logSurvival = Math.log(survival);
+  const standardError = Math.sqrt(greenwood) / Math.abs(logSurvival);
+  const transformed = Math.log(-logSurvival);
+  const lower = Math.exp(-Math.exp(transformed + z * standardError));
+  const upper = Math.exp(-Math.exp(transformed - z * standardError));
+  return { lower: Math.max(0, lower), upper: Math.min(1, upper) };
+}
+
+function createPrecisionRecallView(chart, theme) {
+  const series = getRenderableSeries(chart).filter((item) => item.visible);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const colors = series.map(
+    (item, index) => item.color || ['#3b82f6', '#ef4444', '#22c55e'][index % 3]
+  );
+  return createScientificCartesianFrame(chart, theme, {
+    aria: 'Precision-recall curve',
+    xDomain: [0, 1],
+    yDomain: [0, 1],
+    xLabel: chart.xLabel || 'Recall',
+    yLabel: chart.yLabel || 'Precision',
+    marks: (xFor, yFor) => {
+      const curves = series
+        .map((item, seriesIndex) => {
+          const color = colors[seriesIndex];
+          const count = Math.min(item.xValues.length, item.values.length);
+          const points = Array.from(
+            { length: count },
+            (_, index) => `${xFor(item.xValues[index])},${yFor(item.values[index])}`
+          ).join(' ');
+          const markers = Array.from({ length: count }, (_, index) => {
+            const tip = `${item.name} · recall ${formatChartValue(item.xValues[index])}; precision ${formatChartValue(item.values[index])}`;
+            return `<circle data-neopresent-mark-kind="precision-recall-point" data-neopresent-tooltip="${escapeSvgText(tip)}" cx="${xFor(item.xValues[index])}" cy="${yFor(item.values[index])}" r="5" fill="${color}"><title>${escapeSvgText(tip)}</title></circle>`;
+          }).join('');
+          return `<polyline data-neopresent-pr-series="${seriesIndex}" points="${points}" fill="none" stroke="${color}" stroke-width="3"/>${markers}`;
+        })
+        .join('');
+      const legend = specialLegendEnabled(style, series.length > 1)
+        ? createSpecialLegend(
+            series.map((item, index) => ({ label: item.name, color: colors[index] })),
+            theme,
+            style
+          )
+        : '';
+      return curves + legend;
+    }
+  });
+}
+
+function createVolcanoView(chart, theme) {
+  const x = chart.xValues ?? [],
+    y = chart.values ?? [];
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const fold = Math.abs(safeNumber(style['volcano-fold-threshold'], 1));
+  const significance = safeNumber(style['volcano-significance-threshold'], 1.30103);
+  const showLabels = isEnabled(style['volcano-labels']);
+  const significantOnly = !['false', 'no', 'off', '0'].includes(
+    String(style['volcano-label-significant-only'] ?? 'true').toLowerCase()
+  );
+  const labelSize = Math.max(9, safeNumber(style['volcano-label-size'], 14));
+  const xDomain = numericDomain(x),
+    yDomain = [0, Math.max(1, ...y) * 1.1];
+  return createScientificCartesianFrame(chart, theme, {
+    aria: 'Volcano plot',
+    xDomain,
+    yDomain,
+    xLabel: chart.xLabel || 'log₂ fold change',
+    yLabel: chart.yLabel || '−log₁₀ p',
+    marks: (xFor, yFor, plot) => {
+      const references = `<path d="M ${xFor(-fold)} ${plot.top} V ${plot.top + plot.height} M ${xFor(fold)} ${plot.top} V ${plot.top + plot.height} M ${plot.left} ${yFor(significance)} H ${plot.left + plot.width}" stroke="${theme.muted}" stroke-dasharray="6 5"/>`;
+      const marks =
+        references +
+        y
+          .map((value, index) => {
+            const significant = value >= significance && Math.abs(x[index]) >= fold;
+            const tip = `${chart.labels?.[index] ?? index + 1}: ${formatChartValue(x[index])}, ${formatChartValue(value)}`;
+            const color = significant ? (x[index] < 0 ? '#3b82f6' : '#ef4444') : theme.muted;
+            const label =
+              showLabels && (!significantOnly || significant) && chart.labels?.[index]
+                ? `<text data-neopresent-volcano-label="${index}" x="${xFor(x[index]) + 8}" y="${yFor(value) - 8}" fill="${theme.foreground}" font-size="${labelSize}">${escapeSvgText(chart.labels[index])}</text>`
+                : '';
+            return `<circle data-neopresent-mark-kind="volcano" data-neopresent-tooltip="${escapeSvgText(tip)}" cx="${xFor(x[index])}" cy="${yFor(value)}" r="5" fill="${color}"><title>${escapeSvgText(tip)}</title></circle>${label}`;
+          })
+          .join('');
+      const legend = specialLegendEnabled(style, true)
+        ? createSpecialLegend(
+            [
+              { label: 'Decreased', color: '#3b82f6' },
+              { label: 'Not significant', color: theme.muted },
+              { label: 'Increased', color: '#ef4444' }
+            ],
+            theme,
+            style
+          )
+        : '';
+      return marks + legend;
+    }
+  });
+}
+
+function createWaterfallView(chart, theme) {
+  const values = chart.values ?? [],
+    labels = chart.labels ?? [];
+  let running = 0;
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const totalIndices = new Set(
+    String(style['waterfall-total-indices'] ?? '')
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value >= 0)
+  );
+  const bars = values.map((value, index) => {
+    const total = totalIndices.has(index);
+    const start = total ? 0 : running;
+    running = total ? value : running + value;
+    return { start, end: running, value, total, label: labels[index] ?? String(index + 1) };
+  });
+  if (isEnabled(style['waterfall-total']))
+    bars.push({ start: 0, end: running, value: running, total: true, label: 'Total' });
+  const domain = numericDomain([0, ...bars.flatMap((bar) => [bar.start, bar.end])]);
+  return createScientificCartesianFrame(chart, theme, {
+    aria: 'Waterfall plot',
+    xDomain: [0, Math.max(1, bars.length)],
+    yDomain: domain,
+    xLabel: chart.xLabel || 'Contribution',
+    yLabel: chart.yLabel || 'Cumulative value',
+    showXTicks: false,
+    marks: (xFor, yFor, plot) => {
+      const marks = bars
+        .map((bar, index) => {
+          const x0 = xFor(index + 0.15),
+            x1 = xFor(index + 0.85);
+          const top = yFor(Math.max(bar.start, bar.end)),
+            bottom = yFor(Math.min(bar.start, bar.end));
+          const tip = bar.total
+            ? `${bar.label}: total ${formatChartValue(bar.end)}`
+            : `${bar.label}: ${formatChartValue(bar.value)}; cumulative ${formatChartValue(bar.end)}`;
+          const color = bar.total ? theme.accent : bar.value >= 0 ? '#22c55e' : '#ef4444';
+          return `<rect data-neopresent-mark-kind="${bar.total ? 'waterfall-total' : 'waterfall'}" data-neopresent-tooltip="${escapeSvgText(tip)}" x="${x0}" y="${top}" width="${x1 - x0}" height="${Math.max(2, bottom - top)}" fill="${color}"><title>${escapeSvgText(tip)}</title></rect><text x="${(x0 + x1) / 2}" y="${plot.top + plot.height + 22}" fill="${theme.muted}" font-size="14" text-anchor="middle">${escapeSvgText(bar.label)}</text>`;
+        })
+        .join('');
+      const legend = specialLegendEnabled(style)
+        ? createSpecialLegend(
+            [
+              { label: 'Increase', color: '#22c55e' },
+              { label: 'Decrease', color: '#ef4444' },
+              ...(bars.some((bar) => bar.total) ? [{ label: 'Total', color: theme.accent }] : [])
+            ],
+            theme,
+            style
+          )
+        : '';
+      return marks + legend;
+    }
+  });
+}
+
+function createTimeSeriesView(chart, theme) {
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const requestedWindow = Math.max(0, Math.trunc(safeNumber(style['time-window'], 0)));
+  const offset = requestedWindow > 0 ? Math.max(0, chart.values.length - requestedWindow) : 0;
+  const values = (chart.values ?? []).slice(offset),
+    labels = (chart.labels ?? []).slice(offset),
+    errors = (chart.errorValues ?? []).slice(offset);
+  const missing = new Set(
+    String(style['time-missing'] ?? '')
+      .split(',')
+      .map((value) => Number(value.trim()) - offset)
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < values.length)
+  );
+  const validPoints = values.flatMap((value, index) =>
+    missing.has(index) ? [] : [{ value, error: errors[index] ?? 0 }]
+  );
+  const yDomain = numericDomain(
+      validPoints.flatMap(({ value, error }) => [value - error, value + error])
+    ),
+    padding = Math.max((yDomain[1] - yDomain[0]) * 0.1, 0.1);
+  return createScientificCartesianFrame(chart, theme, {
+    aria: 'Time series plot',
+    xDomain: [0, Math.max(1, values.length - 1)],
+    yDomain: [yDomain[0] - padding, yDomain[1] + padding],
+    xLabel: chart.xLabel || 'Time',
+    yLabel: chart.yLabel || 'Value',
+    showXTicks: false,
+    marks: (xFor, yFor, plot) => {
+      const groups = [];
+      values.forEach((value, index) => {
+        if (missing.has(index)) return;
+        const previousMissing = index === 0 || missing.has(index - 1);
+        if (previousMissing) groups.push([]);
+        groups.at(-1).push({ index, value, error: errors[index] ?? 0 });
+      });
+      const band = groups
+        .filter((group) => group.some((point) => point.error > 0))
+        .map(
+          (group) =>
+            `<path data-neopresent-mark-kind="time-series-band" d="M ${group.map((point) => `${xFor(point.index)} ${yFor(point.value + point.error)}`).join(' L ')} L ${[
+              ...group
+            ]
+              .reverse()
+              .map((point) => `${xFor(point.index)} ${yFor(point.value - point.error)}`)
+              .join(' L ')} Z" fill="${theme.accent}" opacity=".2"/>`
+        )
+        .join('');
+      const markers = values
+        .map((value, index) => {
+          if (missing.has(index)) return '';
+          const tip = `${labels[index] ?? index + 1}: ${formatChartValue(value)}${errors[index] ? ` ± ${formatChartValue(errors[index])}` : ''}`;
+          return `<circle data-neopresent-mark-kind="time-series-point" data-neopresent-tooltip="${escapeSvgText(tip)}" cx="${xFor(index)}" cy="${yFor(value)}" r="5" fill="${theme.accent}"><title>${escapeSvgText(tip)}</title></circle>`;
+        })
+        .join('');
+      const legend = specialLegendEnabled(style)
+        ? createSpecialLegend(
+            [{ label: String(style['legend-labels'] || 'Time series'), color: theme.accent }],
+            theme,
+            style
+          )
+        : '';
+      const lines = groups
+        .map(
+          (group) =>
+            `<polyline data-neopresent-mark-kind="time-series" points="${group.map((point) => `${xFor(point.index)},${yFor(point.value)}`).join(' ')}" fill="none" stroke="${theme.accent}" stroke-width="3"/>`
+        )
+        .join('');
+      return `${band}${lines}${markers}${labels.map((label, index) => `<text x="${xFor(index)}" y="${plot.top + plot.height + 22}" fill="${theme.muted}" font-size="13" text-anchor="middle">${escapeSvgText(label)}</text>`).join('')}${legend}`;
+    }
+  });
+}
+
+function createGeographicView(chart, theme) {
+  const longitude = chart.xValues ?? [],
+    latitude = chart.values ?? [];
+  const regions = getRenderableSeries(chart).filter(
+    (item) => item.visible && item.xValues.length > 2 && item.values.length > 2
+  );
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const pointValues = chart.getAttribute?.('geoPointValues') ?? [];
+  const quantitativeValues = [...regions.map((region) => region.geoValue), ...pointValues].filter(
+    Number.isFinite
+  );
+  const quantitative = quantitativeValues.length > 0;
+  const valueMinimum = quantitative ? Math.min(...quantitativeValues) : 0;
+  const valueMaximum = quantitative ? Math.max(...quantitativeValues) : 1;
+  const palette = resolvePalette(style['geo-palette'] ?? 'kViridis', style);
+  const colorFor = (value, fallback) =>
+    Number.isFinite(value)
+      ? samplePalette(
+          palette,
+          (value - valueMinimum) / Math.max(valueMaximum - valueMinimum, Number.EPSILON)
+        )
+      : fallback;
+  return createScientificCartesianFrame(chart, theme, {
+    aria: 'Geographic plot',
+    xDomain: [-180, 180],
+    yDomain: [-90, 90],
+    xLabel: chart.xLabel || 'Longitude',
+    yLabel: chart.yLabel || 'Latitude',
+    marks: (xFor, yFor) => {
+      const regionMarkup = regions
+        .map((region, index) => {
+          const name = region.name || `Region ${index + 1}`;
+          const tip = `${name}${Number.isFinite(region.geoValue) ? `: ${formatChartValue(region.geoValue)}` : ''}`;
+          const color = colorFor(region.geoValue, region.color || theme.accent);
+          return `<polygon data-neopresent-mark-kind="geographic-region" data-neopresent-tooltip="${escapeSvgText(tip)}" points="${region.xValues.map((value, pointIndex) => `${xFor(value)},${yFor(region.values[pointIndex])}`).join(' ')}" fill="${color}" fill-opacity=".55" stroke="${color}" stroke-width="2"><title>${escapeSvgText(tip)}</title></polygon>`;
+        })
+        .join('');
+      const legend = specialLegendEnabled(style, regions.length > 1)
+        ? createSpecialLegend(
+            regions.map((region) => ({
+              label: region.name,
+              color: colorFor(region.geoValue, region.color || theme.accent)
+            })),
+            theme,
+            style
+          )
+        : '';
+      return `<path d="M ${xFor(-170)} ${yFor(0)} Q ${xFor(-120)} ${yFor(75)} ${xFor(-55)} ${yFor(45)} T ${xFor(20)} ${yFor(35)} T ${xFor(100)} ${yFor(55)} T ${xFor(170)} ${yFor(0)} Q ${xFor(120)} ${yFor(-55)} ${xFor(20)} ${yFor(-35)} T ${xFor(-80)} ${yFor(-45)} T ${xFor(-170)} ${yFor(0)}" fill="${theme.surface}" stroke="${theme.border}" opacity=".7"/>${regionMarkup}${latitude
+        .map((value, index) => {
+          const quantitativeTip = Number.isFinite(pointValues[index])
+            ? `; ${formatChartValue(pointValues[index])}`
+            : '';
+          const tip = `${chart.labels?.[index] ?? index + 1}: ${formatChartValue(longitude[index])}, ${formatChartValue(value)}${quantitativeTip}`;
+          return `<circle data-neopresent-mark-kind="geographic-point" data-neopresent-tooltip="${escapeSvgText(tip)}" cx="${xFor(longitude[index])}" cy="${yFor(value)}" r="6" fill="${colorFor(pointValues[index], theme.accent)}"><title>${escapeSvgText(tip)}</title></circle>`;
+        })
+        .join(
+          ''
+        )}${legend}${quantitative ? createGeographicColorScale(style, palette, valueMinimum, valueMaximum, theme) : ''}`;
+    }
+  });
+}
+
+function createGeographicColorScale(style, palette, minimum, maximum, theme) {
+  const id = 'neopresent-geographic-color-scale';
+  const label = String(style['geo-color-label'] ?? 'Value');
+  const chartNumber = (value, fallback, minimum, maximum) => {
+    const parsed = safeOptionalNumber(value);
+    return Math.max(minimum, Math.min(maximum, parsed ?? fallback));
+  };
+  const x = chartNumber(style['geo-colorbar-x'], 738, -100, 945);
+  const y = chartNumber(style['geo-colorbar-y'], 72, -100, 600);
+  const width = chartNumber(style['geo-colorbar-width'], 16, 6, 200);
+  const height = chartNumber(style['geo-colorbar-height'], 150, 40, 500);
+  const textX = x + width + 6;
+  const labelX = x + width + 28;
+  const labelY = y + height / 2;
+  return `<defs><linearGradient id="${id}" x1="0" y1="1" x2="0" y2="0">${paletteGradientStops(palette)}</linearGradient></defs><rect data-neopresent-geographic-colorbar="true" x="${x}" y="${y}" width="${width}" height="${height}" fill="url(#${id})"/><text x="${textX}" y="${y + 10}" fill="${theme.foreground}" font-size="13">${formatChartValue(maximum)}</text><text x="${textX}" y="${y + height}" fill="${theme.foreground}" font-size="13">${formatChartValue(minimum)}</text><text x="${labelX}" y="${labelY}" fill="${theme.foreground}" font-size="15" text-anchor="middle" transform="rotate(-90 ${labelX} ${labelY})">${renderSvgMath(label)}</text>`;
+}
+
+function createSankeyView(chart, theme) {
+  const series = getRenderableSeries(chart).filter((item) => item.visible);
+  const links = series.map((item, index) => {
+    const [source, target] = String(item.name || `Flow ${index + 1}`).split(/\s*(?:->|→|\|)\s*/, 2);
+    return {
+      source,
+      target: target || `Target ${index + 1}`,
+      value: Math.max(0, item.values[0] ?? 0),
+      color: item.color || theme.accent
+    };
+  });
+  const sources = [...new Set(links.map((link) => link.source))],
+    targets = [...new Set(links.map((link) => link.target))];
+  const maximum = Math.max(1, ...links.map((link) => link.value));
+  const body = links
+    .map((link) => {
+      const sourceIndex = sources.indexOf(link.source),
+        targetIndex = targets.indexOf(link.target);
+      const sy = 75 + sourceIndex * (360 / Math.max(1, sources.length)),
+        ty = 75 + targetIndex * (360 / Math.max(1, targets.length));
+      const thickness = 4 + (link.value / maximum) * 28;
+      const tip = `${link.source} → ${link.target}: ${formatChartValue(link.value)}`;
+      return `<path data-neopresent-mark-kind="sankey-link" data-neopresent-tooltip="${escapeSvgText(tip)}" d="M 190 ${sy} C 365 ${sy}, 480 ${ty}, 655 ${ty}" fill="none" stroke="${link.color}" stroke-width="${thickness}" opacity=".55"><title>${escapeSvgText(tip)}</title></path>`;
+    })
+    .join('');
+  const nodes = `${sources.map((name, index) => `<rect x="170" y="${60 + index * (360 / Math.max(1, sources.length))}" width="20" height="30" fill="${theme.foreground}"/><text x="160" y="${81 + index * (360 / Math.max(1, sources.length))}" text-anchor="end" fill="${theme.foreground}" font-size="16">${escapeSvgText(name)}</text>`).join('')}${targets.map((name, index) => `<rect x="655" y="${60 + index * (360 / Math.max(1, targets.length))}" width="20" height="30" fill="${theme.foreground}"/><text x="685" y="${81 + index * (360 / Math.max(1, targets.length))}" fill="${theme.foreground}" font-size="16">${escapeSvgText(name)}</text>`).join('')}`;
+  return specialPlotFrame(chart, theme, body + nodes, 'Sankey diagram');
+}
+
+function createRatioView(chart, theme) {
+  const series = getRenderableSeries(chart).filter((item) => item.visible);
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const numerator = series[0];
+  const denominator = series[1];
+  const pull = String(style['ratio-mode'] ?? 'ratio').toLowerCase() === 'pull';
+  const count = Math.min(numerator?.values.length ?? 0, denominator?.values.length ?? 0);
+  const labels =
+    chart.labels?.length === count
+      ? Array.from(chart.labels)
+      : numerator?.labels?.length === count
+        ? numerator.labels
+        : Array.from({ length: count }, (_, index) => String(index + 1));
+  const points = Array.from({ length: count }, (_, index) => {
+    const data = numerator.values[index];
+    const model = denominator.values[index];
+    const dataError = numerator.errorValues[index] ?? 0;
+    const modelError = denominator.errorValues[index] ?? 0;
+    if (pull) {
+      const combinedError = Math.sqrt(dataError ** 2 + modelError ** 2) || 1;
+      return { error: 1, value: (data - model) / combinedError };
+    }
+    if (model === 0) return { error: 0, value: 0 };
+    const value = data / model;
+    const relativeData = data !== 0 ? dataError / Math.abs(data) : 0;
+    const relativeModel = modelError / Math.abs(model);
+    return {
+      error: Math.abs(value) * Math.sqrt(relativeData ** 2 + relativeModel ** 2),
+      value
+    };
+  });
+  const reference = pull ? 0 : safeNumber(style['ratio-reference'], 1);
+  const extents = points.flatMap(({ value, error }) => [value - error, value + error]);
+  const dataMinimum = Math.min(reference, ...extents);
+  const dataMaximum = Math.max(reference, ...extents);
+  const range = Math.max(dataMaximum - dataMinimum, pull ? 2 : 0.2);
+  const yMinimum = appearance.yMin ?? dataMinimum - range * 0.12;
+  const yMaximum = appearance.yMax ?? dataMaximum + range * 0.12;
+  const width = 845;
+  const height = 500;
+  const plot = { left: 105, top: 48, width: 680, height: 350 };
+  plot.bottom = plot.top + plot.height;
+  const yFor = (value) =>
+    plot.bottom -
+    ((value - yMinimum) / Math.max(yMaximum - yMinimum, Number.EPSILON)) * plot.height;
+  const slotWidth = plot.width / Math.max(count, 1);
+  const ticks = createScientificTicks(yMinimum, yMaximum, 5);
+  const grid = ticks
+    .map((tick) => {
+      const y = yFor(tick);
+      return `<path d="M ${plot.left} ${y} H ${plot.left + plot.width}" stroke="${theme.border}" stroke-width="1" stroke-dasharray="4 6" opacity=".45"/><text x="${plot.left - 12}" y="${y + 5}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="17" text-anchor="end">${formatChartValue(tick)}</text>`;
+    })
+    .join('');
+  const xLabels = labels
+    .map(
+      (label, index) =>
+        `<text x="${plot.left + (index + 0.5) * slotWidth}" y="${plot.bottom + 29}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="18" text-anchor="middle">${escapeSvgText(label)}</text>`
+    )
+    .join('');
+  const marks = points
+    .map(({ value, error }, index) => {
+      const x = plot.left + (index + 0.5) * slotWidth;
+      const y = yFor(value);
+      const top = yFor(value + error);
+      const bottom = yFor(value - error);
+      const tooltip = `${labels[index]}: ${formatChartValue(value)} ± ${formatChartValue(error)}`;
+      return `<g style="${createDataAnimation(appearance, index, points.length)}"><path d="M ${x} ${top} V ${bottom} M ${x - 6} ${top} H ${x + 6} M ${x - 6} ${bottom} H ${x + 6}" stroke="${appearance.dataColor}" stroke-width="2"/><circle data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="${pull ? 'pull' : 'ratio'}" cx="${x}" cy="${y}" r="6" fill="${appearance.dataColor}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tooltip)}</title></circle></g>`;
+    })
+    .join('');
+  const yLabel = chart.yLabel || (pull ? 'Pull' : 'Data / Model');
+  const axisLabels = `${createSpecialAxisLabel(chart.xLabel, 'x', plot.left + plot.width / 2, height - 16, theme, style)}${createSpecialAxisLabel(yLabel, 'y', 24, plot.top + plot.height / 2, theme, style)}`;
+  const frame = `<path d="M ${plot.left} ${plot.top} V ${plot.bottom} H ${plot.left + plot.width} V ${plot.top} Z" fill="none" stroke="${theme.border}" stroke-width="2"/>`;
+  const referenceLine = `<path data-neopresent-ratio-reference="${reference}" d="M ${plot.left} ${yFor(reference)} H ${plot.left + plot.width}" stroke="${appearance.referenceColor}" stroke-width="2" stroke-dasharray="7 6"/>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${grid}${referenceLine}${frame}${xLabels}${axisLabels}${marks}`,
+    pull ? 'Pull panel' : 'Ratio panel',
+    width,
+    height
+  );
+}
+
+function createRocView(chart, theme) {
+  const series = getRenderableSeries(chart).filter((item) => item.visible);
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const width = 845;
+  const height = 500;
+  const plot = { left: 105, top: 48, width: 650, height: 350 };
+  plot.bottom = plot.top + plot.height;
+  const xFor = (value) => plot.left + Math.max(0, Math.min(1, value)) * plot.width;
+  const yFor = (value) => plot.bottom - Math.max(0, Math.min(1, value)) * plot.height;
+  const ticks = Array.from({ length: 6 }, (_, index) => index / 5);
+  const grid = ticks
+    .map((tick) => {
+      const x = xFor(tick);
+      const y = yFor(tick);
+      return `<path d="M ${x} ${plot.top} V ${plot.bottom}" stroke="${theme.border}" stroke-width="1" stroke-dasharray="4 6" opacity=".35"/><path d="M ${plot.left} ${y} H ${plot.left + plot.width}" stroke="${theme.border}" stroke-width="1" stroke-dasharray="4 6" opacity=".35"/><text x="${x}" y="${plot.bottom + 27}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="17" text-anchor="middle">${formatChartValue(tick)}</text><text x="${plot.left - 12}" y="${y + 5}" fill="${theme.muted}" font-family="system-ui,sans-serif" font-size="17" text-anchor="end">${formatChartValue(tick)}</text>`;
+    })
+    .join('');
+  const colors = ['#38bdf8', '#f97316', '#a78bfa', '#22c55e', '#f43f5e'];
+  const curves = series
+    .map((item, seriesIndex) => {
+      const color = safeColor(item.color, colors[seriesIndex % colors.length]);
+      const count = Math.min(item.xValues.length, item.values.length);
+      const coordinates = Array.from({ length: count }, (_, index) => ({
+        fpr: item.xValues[index],
+        tpr: item.values[index],
+        x: xFor(item.xValues[index]),
+        y: yFor(item.values[index])
+      }));
+      const path = coordinates.map(({ x, y }) => `${x},${y}`).join(' ');
+      const points = coordinates
+        .map(({ fpr, tpr, x, y }, index) => {
+          const tooltip = `${item.name} · point ${index + 1}: FPR ${formatChartValue(fpr)}, TPR ${formatChartValue(tpr)}`;
+          return `<circle data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="roc" cx="${x}" cy="${y}" r="5" fill="${color}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tooltip)}</title></circle>`;
+        })
+        .join('');
+      return `<g data-neopresent-roc-series="${seriesIndex}" style="${specialAnimation(item, appearance)}"><polyline points="${path}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>${points}</g>`;
+    })
+    .join('');
+  const legend = specialLegendEnabled(style, true)
+    ? createSpecialLegend(
+        series.map((item, index) => ({
+          label: `${item.name} · AUC ${formatChartValue(calculateRocAuc(item.xValues, item.values))}`,
+          color: safeColor(item.color, colors[index % colors.length])
+        })),
+        theme,
+        style
+      )
+    : '';
+  const frame = `<path d="M ${plot.left} ${plot.top} V ${plot.bottom} H ${plot.left + plot.width} V ${plot.top} Z" fill="none" stroke="${theme.border}" stroke-width="2"/>`;
+  const diagonal = `<path data-neopresent-roc-chance="true" d="M ${xFor(0)} ${yFor(0)} L ${xFor(1)} ${yFor(1)}" stroke="${theme.muted}" stroke-width="2" stroke-dasharray="8 7" opacity=".75"/>`;
+  const xLabel = chart.xLabel || 'False Positive Rate';
+  const yLabel = chart.yLabel || 'True Positive Rate';
+  const axisLabels = `${createSpecialAxisLabel(xLabel, 'x', plot.left + plot.width / 2, 480, theme, style)}${createSpecialAxisLabel(yLabel, 'y', 24, plot.top + plot.height / 2, theme, style)}`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${grid}${diagonal}${frame}${axisLabels}${curves}${legend}`,
+    'ROC curve',
+    width,
+    height
+  );
+}
+
+function calculateRocAuc(xValues, yValues) {
+  const points = xValues
+    .map((x, index) => ({ x, y: yValues[index] }))
+    .filter(({ x, y }) => Number.isFinite(x) && Number.isFinite(y))
+    .sort((a, b) => a.x - b.x);
+  return points.slice(1).reduce((area, point, index) => {
+    const previous = points[index];
+    return area + (point.x - previous.x) * (point.y + previous.y) * 0.5;
+  }, 0);
+}
+
+function createCornerView(chart, theme) {
+  const series = getRenderableSeries(chart).filter((item) => item.visible);
+  const size = Math.min(4, series.length);
+  const cell = 115,
+    left = 145,
+    top = 52;
+  const colors = ['#38bdf8', '#f97316', '#a78bfa', '#22c55e'];
+  const ranges = series.slice(0, size).map((item) => {
+    const dataMinimum = Math.min(...item.values);
+    const dataMaximum = Math.max(...item.values);
+    const span = Math.max(dataMaximum - dataMinimum, Math.abs(dataMaximum) * 0.1, 1e-6);
+    return {
+      minimum: dataMinimum - span * 0.1,
+      maximum: dataMaximum > 0 ? dataMaximum * 1.1 : dataMaximum + span * 0.1
+    };
+  });
+  const cells = Array.from({ length: size }, (_, row) =>
+    Array.from({ length: size }, (_, column) => {
+      if (column > row) return '';
+      const x = left + column * cell,
+        y = top + row * cell;
+      const frame = `<rect data-neopresent-corner-cell="${row},${column}" data-neopresent-corner-x-min="${ranges[column].minimum}" data-neopresent-corner-x-max="${ranges[column].maximum}" data-neopresent-corner-y-min="${ranges[row].minimum}" data-neopresent-corner-y-max="${ranges[row].maximum}" x="${x}" y="${y}" width="${cell}" height="${cell}" fill="none" stroke="${theme.border}" stroke-width="1"/>`;
+      if (row === column) {
+        const values = series[row].values;
+        const { minimum, maximum } = ranges[row];
+        const bins = 8,
+          counts = Array(bins).fill(0);
+        values.forEach(
+          (value) =>
+            counts[
+              Math.min(bins - 1, Math.floor(((value - minimum) / (maximum - minimum || 1)) * bins))
+            ]++
+        );
+        const peak = Math.max(1, ...counts);
+        const countMaximum = peak * 1.1;
+        const bars = counts
+          .map((count, index) => {
+            const lower = minimum + ((maximum - minimum) * index) / bins;
+            const upper = minimum + ((maximum - minimum) * (index + 1)) / bins;
+            const tip = `${series[row].name}: ${formatChartValue(lower)}–${formatChartValue(upper)}; count ${count}`;
+            return `<rect data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="corner-histogram" data-neopresent-corner-histogram-x-min="${minimum}" data-neopresent-corner-histogram-x-max="${maximum}" data-neopresent-corner-histogram-y-min="0" data-neopresent-corner-histogram-y-max="${countMaximum}" x="${x + (index * cell) / bins}" y="${y + cell - (count / countMaximum) * cell}" width="${cell / bins - 1}" height="${(count / countMaximum) * cell}" fill="${colors[row]}" opacity=".75"><title>${escapeSvgText(tip)}</title></rect>`;
+          })
+          .join('');
+        return frame + bars;
+      }
+      const xValues = series[column].values,
+        yValues = series[row].values;
+      const xRange = ranges[column],
+        yRange = ranges[row];
+      const count = Math.min(xValues.length, yValues.length);
+      const points = Array.from({ length: count }, (_, index) => {
+        const pointX =
+          x + ((xValues[index] - xRange.minimum) / (xRange.maximum - xRange.minimum || 1)) * cell;
+        const pointY =
+          y +
+          cell -
+          ((yValues[index] - yRange.minimum) / (yRange.maximum - yRange.minimum || 1)) * cell;
+        const tip = `${series[column].name}: ${formatChartValue(xValues[index])}; ${series[row].name}: ${formatChartValue(yValues[index])}`;
+        return `<circle data-neopresent-tooltip="${escapeSvgText(tip)}" data-neopresent-mark-kind="corner-point" cx="${pointX}" cy="${pointY}" r="3" fill="${colors[row]}" opacity=".75"><title>${escapeSvgText(tip)}</title></circle>`;
+      }).join('');
+      return frame + points;
+    }).join('')
+  ).join('');
+  const columnLabels = series
+    .slice(0, size)
+    .map(
+      (item, index) =>
+        `<text data-neopresent-corner-column="${index}" x="${left + index * cell + cell / 2}" y="${top + size * cell + 25}" text-anchor="middle" fill="${theme.foreground}" font-size="16" font-weight="600">${escapeSvgText(item.name)}</text><text x="${left + index * cell}" y="${top + size * cell + 10}" text-anchor="start" fill="${theme.muted}" font-size="12">${formatChartValue(ranges[index].minimum)}</text><text x="${left + (index + 1) * cell}" y="${top + size * cell + 10}" text-anchor="end" fill="${theme.muted}" font-size="12">${formatChartValue(ranges[index].maximum)}</text>`
+    )
+    .join('');
+  const rowLabels = series
+    .slice(0, size)
+    .map(
+      (item, index) =>
+        `<text data-neopresent-corner-row="${index}" x="${left - 28}" y="${top + index * cell + cell / 2}" text-anchor="middle" fill="${theme.foreground}" font-size="16" font-weight="600" transform="rotate(-90 ${left - 28} ${top + index * cell + cell / 2})">${escapeSvgText(item.name)}</text><text x="${left - 8}" y="${top + (index + 1) * cell}" text-anchor="end" fill="${theme.muted}" font-size="12">${formatChartValue(ranges[index].minimum)}</text><text x="${left - 8}" y="${top + index * cell + 12}" text-anchor="end" fill="${theme.muted}" font-size="12">${formatChartValue(ranges[index].maximum)}</text>`
+    )
+    .join('');
+  const width = Math.max(650, left + size * cell + 50);
+  const height = Math.max(520, top + size * cell + 55);
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${cells}${columnLabels}${rowLabels}`,
+    'Corner plot',
+    width,
+    height
+  );
+}
+
+function createRadarView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const series = getRenderableSeries(chart).filter(
+    (item) => item.visible && item.values.length > 0
+  );
+  const categoryCount = Math.max(0, ...series.map((item) => item.values.length));
+  const labels =
+    chart.labels?.length === categoryCount
+      ? Array.from(chart.labels)
+      : series[0]?.labels?.length === categoryCount
+        ? Array.from(series[0].labels)
+        : Array.from({ length: categoryCount }, (_, index) => String(index + 1));
+  const width = Math.max(360, safeNumber(style['chart-width'], 845));
+  const height = Math.max(320, safeNumber(style['chart-height'], 500));
+  const centerX = width * 0.43;
+  const centerY = height * 0.54;
+  const radius = Math.max(60, Math.min(width * 0.3, height * 0.36));
+  const allValues = series.flatMap((item) => item.values).filter(Number.isFinite);
+  const dataMinimum = allValues.length > 0 ? Math.min(...allValues) : 0;
+  const dataMaximum = allValues.length > 0 ? Math.max(...allValues) : 1;
+  const minimum = safeOptionalNumber(style['radar-min']) ?? Math.min(0, dataMinimum);
+  const automaticMaximum = dataMaximum > minimum ? dataMaximum * 1.1 : minimum + 1;
+  const maximum = safeOptionalNumber(style['radar-max']) ?? automaticMaximum;
+  const range = Math.max(maximum - minimum, Number.EPSILON);
+  const levels = Math.max(2, Math.min(10, Math.trunc(safeNumber(style['radar-grid-levels'], 5))));
+  const gridColor = safeColor(style['radar-grid-color'], theme.border);
+  const labelColor = safeColor(style['radar-label-color'], theme.foreground);
+  const labelSize = Math.max(9, safeNumber(style['radar-label-size'], 16));
+  const fillAlpha = safeAlpha(style['radar-fill-alpha'] ?? '.2');
+  const strokeWidth = Math.max(1, safeNumber(style['radar-stroke-width'], 3));
+  const pointSize = Math.max(0, safeNumber(style['radar-point-size'], 5));
+  const palette = ['#38bdf8', '#f97316', '#a78bfa', '#22c55e', '#f43f5e', '#facc15'];
+  const pointAt = (index, value, scale = 1) => {
+    const angle = -90 + (index / Math.max(categoryCount, 1)) * 360;
+    const normalized = Math.max(0, Math.min(1, (value - minimum) / range)) * scale;
+    return polarPoint(centerX, centerY, radius * normalized, angle);
+  };
+  const perimeterPoint = (index, scale = 1) =>
+    polarPoint(centerX, centerY, radius * scale, -90 + (index / categoryCount) * 360);
+  const polygonPoints = (points) => points.map(({ x, y }) => `${x},${y}`).join(' ');
+
+  const rings =
+    categoryCount >= 3
+      ? Array.from({ length: levels }, (_, level) => {
+          const scale = (level + 1) / levels;
+          const points = Array.from({ length: categoryCount }, (_, index) =>
+            perimeterPoint(index, scale)
+          );
+          return `<polygon points="${polygonPoints(points)}" fill="none" stroke="${gridColor}" stroke-width="1" opacity="${level === levels - 1 ? 0.8 : 0.42}"/>`;
+        }).join('')
+      : '';
+  const axes =
+    categoryCount >= 3
+      ? Array.from({ length: categoryCount }, (_, index) => {
+          const end = perimeterPoint(index);
+          return `<path d="M ${centerX} ${centerY} L ${end.x} ${end.y}" stroke="${gridColor}" stroke-width="1" opacity=".55"/>`;
+        }).join('')
+      : '';
+  const categoryLabels =
+    categoryCount >= 3
+      ? labels
+          .map((label, index) => {
+            const point = perimeterPoint(index, 1.14);
+            const anchor =
+              Math.abs(point.x - centerX) < 8 ? 'middle' : point.x < centerX ? 'end' : 'start';
+            return `<text x="${point.x}" y="${point.y}" fill="${labelColor}" font-family="system-ui, sans-serif" font-size="${labelSize}" text-anchor="${anchor}" dominant-baseline="middle">${escapeSvgText(label)}</text>`;
+          })
+          .join('')
+      : '';
+  const seriesMarkup = series
+    .map((item, seriesIndex) => {
+      const color = safeColor(item.color, palette[seriesIndex % palette.length]);
+      const points = item.values.map((value, index) => pointAt(index, value));
+      const requestedAnimation = String(item.animation || appearance.animation).toLowerCase();
+      const animationName =
+        requestedAnimation === 'fade'
+          ? 'fade'
+          : requestedAnimation === 'rise'
+            ? 'rise'
+            : requestedAnimation
+              ? 'grow'
+              : '';
+      const duration = item.animationDuration || appearance.animationDuration;
+      const delay = item.animationDelay || appearance.animationDelay;
+      const easing = item.animationEasing || appearance.animationEasing;
+      const animationStyle = animationName
+        ? `animation:neopresent-chart-${animationName} ${duration} ${easing} ${delay} both;transform-box:fill-box;transform-origin:${centerX}px ${centerY}px;`
+        : '';
+      const marks = points
+        .map((point, index) => {
+          const tooltip = `${item.name} · ${labels[index]}: ${formatChartValue(item.values[index])}`;
+          return `<circle data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="radar" cx="${point.x}" cy="${point.y}" r="${pointSize}" fill="${color}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tooltip)}</title></circle>`;
+        })
+        .join('');
+      return `<g data-neopresent-radar-series="${seriesIndex}" style="${animationStyle}"><polygon points="${polygonPoints(points)}" fill="${color}" fill-opacity="${fillAlpha}" stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>${marks}</g>`;
+    })
+    .join('');
+  const legend = specialLegendEnabled(style, series.length > 1)
+    ? createSpecialLegend(
+        series.map((item, index) => ({
+          label: item.name,
+          color: safeColor(item.color, palette[index % palette.length])
+        })),
+        theme,
+        style,
+        { width, height }
+      )
+    : '';
+  const empty =
+    categoryCount >= 3
+      ? ''
+      : `<text x="${width / 2}" y="${height / 2}" fill="${theme.muted}" font-family="system-ui, sans-serif" font-size="20" text-anchor="middle">Radar charts require at least three categories.</text>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${rings}${axes}${seriesMarkup}${categoryLabels}${legend}${empty}`,
+    'Radar chart',
+    width,
+    height
+  );
+}
+
+function createPieView(chart, theme) {
+  const appearance = getPlotAppearance(chart, theme);
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const slices = Array.from(chart.values ?? [])
+    .map((value, index) => ({ index, value: Number(value) }))
+    .filter(({ value }) => Number.isFinite(value) && value > 0);
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
+  const width = Math.max(320, safeNumber(style['chart-width'], 845));
+  const height = Math.max(260, safeNumber(style['chart-height'], 430));
+  const centerX = width * 0.42;
+  const centerY = height * 0.53;
+  const radius = Math.max(40, Math.min(width * 0.29, height * 0.38));
+  const innerRadius = Math.max(
+    0,
+    Math.min(radius * 0.9, radius * (safeNumber(style['pie-inner-radius'], 0) / 100))
+  );
+  const startAngle = safeNumber(style['pie-start-angle'], -90);
+  const colors = String(style['pie-colors'] ?? '')
+    .split(',')
+    .map((color) => safeColor(color.trim(), ''))
+    .filter(Boolean);
+  const palette =
+    colors.length > 0
+      ? colors
+      : ['#38bdf8', '#f97316', '#a78bfa', '#22c55e', '#f43f5e', '#facc15', '#2dd4bf'];
+  const labels = Array.from(chart.labels ?? []);
+  const showLabels = !['false', 'no', 'off', '0'].includes(
+    String(style['pie-labels'] ?? 'true')
+      .trim()
+      .toLowerCase()
+  );
+  const labelPosition = Math.max(
+    0.15,
+    Math.min(1.35, safeNumber(style['pie-label-position'], 0.68))
+  );
+  const labelColor = safeColor(style['pie-label-color'], theme.foreground);
+  const labelSize = Math.max(9, safeNumber(style['pie-label-size'], 16));
+  const stroke = safeColor(style['pie-stroke-color'], theme.background);
+  const strokeWidth = Math.max(0, safeNumber(style['pie-stroke-width'], 2));
+  const baseDelay = parseCssTimeMilliseconds(appearance.animationDelay);
+  const stagger = slices.length > 0 ? Math.min(180, 900 / slices.length) : 0;
+  let angle = startAngle;
+
+  const sliceMarkup = slices
+    .map((slice, visibleIndex) => {
+      const sweep = (slice.value / total) * 360;
+      const endAngle = angle + sweep;
+      const middleAngle = angle + sweep / 2;
+      const path = createPieSlicePath(centerX, centerY, radius, innerRadius, angle, endAngle);
+      const labelPoint = polarPoint(centerX, centerY, radius * labelPosition, middleAngle);
+      const label = labels[slice.index] || `Slice ${slice.index + 1}`;
+      const percent = (slice.value / total) * 100;
+      const delay = `${baseDelay + visibleIndex * stagger}ms`;
+      const animationName =
+        appearance.animation === 'fade'
+          ? 'neopresent-chart-fade'
+          : appearance.animation === 'rise'
+            ? 'neopresent-chart-rise'
+            : 'neopresent-chart-grow';
+      const animationStyle = appearance.animation
+        ? `animation:${animationName} ${appearance.animationDuration} ${appearance.animationEasing} ${delay} both;transform-box:fill-box;transform-origin:${centerX}px ${centerY}px;`
+        : '';
+      angle = endAngle;
+      const tooltip = `${label}: ${formatChartValue(slice.value)} (${formatChartValue(percent)}%)`;
+      return `<g data-neopresent-pie-slice="${slice.index}" style="${animationStyle}"><path data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="pie" d="${path}" fill="${palette[visibleIndex % palette.length]}" stroke="${stroke}" stroke-width="${strokeWidth}"><title>${escapeSvgText(tooltip)}</title></path>${
+        showLabels && percent >= 3
+          ? `<text x="${labelPoint.x}" y="${labelPoint.y}" fill="${labelColor}" font-family="system-ui, sans-serif" font-size="${labelSize}" text-anchor="middle" dominant-baseline="middle" pointer-events="none">${escapeSvgText(label)} · ${formatChartValue(percent)}%</text>`
+          : ''
+      }</g>`;
+    })
+    .join('');
+
+  const legend = specialLegendEnabled(style, true)
+    ? createSpecialLegend(
+        slices.map((slice, index) => ({
+          label: labels[slice.index] || `Slice ${slice.index + 1}`,
+          color: palette[index % palette.length]
+        })),
+        theme,
+        style,
+        { width, height }
+      )
+    : '';
+  const empty =
+    total > 0
+      ? ''
+      : `<text x="${width / 2}" y="${height / 2}" fill="${theme.muted}" font-family="system-ui, sans-serif" font-size="20" text-anchor="middle">Pie charts require positive values.</text>`;
+  return specialPlotFrame(
+    chart,
+    theme,
+    `${sliceMarkup}${legend}${empty}`,
+    'Pie chart',
+    width,
+    height
+  );
+}
+
+function createPieSlicePath(centerX, centerY, outerRadius, innerRadius, startAngle, endAngle) {
+  const outerStart = polarPoint(centerX, centerY, outerRadius, startAngle);
+  const outerEnd = polarPoint(centerX, centerY, outerRadius, endAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  if (innerRadius <= 0) {
+    return `M ${centerX} ${centerY} L ${outerStart.x} ${outerStart.y} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} Z`;
+  }
+  const innerEnd = polarPoint(centerX, centerY, innerRadius, endAngle);
+  const innerStart = polarPoint(centerX, centerY, innerRadius, startAngle);
+  return `M ${outerStart.x} ${outerStart.y} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y} Z`;
+}
+
+function polarPoint(centerX, centerY, radius, angle) {
+  const radians = (angle * Math.PI) / 180;
+  return {
+    x: centerX + Math.cos(radians) * radius,
+    y: centerY + Math.sin(radians) * radius
+  };
+}
+
+function parseCssTimeMilliseconds(value) {
+  const text = String(value ?? '0ms').trim();
+  const number = Number.parseFloat(text);
+  if (!Number.isFinite(number)) return 0;
+  return text.endsWith('s') && !text.endsWith('ms') ? number * 1000 : number;
+}
 
 function createChartViewRaw(chart, theme) {
   const registeredRenderer = getPlotRenderer(chart.kind);
@@ -3375,7 +5003,9 @@ function createChartViewRaw(chart, theme) {
   const yDataMinimum = Math.min(...yExtents, ...fitValues, ...(chart.kind === 'bar' ? [0] : []));
   const yDataMaximum = Math.max(...yExtents, ...fitValues, ...(chart.kind === 'bar' ? [0] : []));
   let yMinimum = appearance.yMin ?? yDataMinimum;
-  let yMaximum = appearance.yMax ?? yDataMaximum;
+  const automaticYMaximum =
+    chart.kind === 'bar' && yDataMaximum > 0 ? yDataMaximum * 1.1 : yDataMaximum;
+  let yMaximum = appearance.yMax ?? automaticYMaximum;
   if (yMaximum <= yMinimum) [yMinimum, yMaximum] = [yDataMinimum, yDataMaximum];
   const yLog = appearance.yScale === 'log' && chart.kind !== 'bar' && yMinimum > 0;
   const yMinimumScaled = yLog ? Math.log10(yMinimum) : yMinimum;
@@ -3632,7 +5262,16 @@ function createChartViewRaw(chart, theme) {
             plot
           )
         : chart.kind === 'bar'
-          ? createBarMarkup(itemChart, points, plot, itemYFor(0), theme, itemAppearance)
+          ? createBarMarkup(
+              itemChart,
+              points,
+              plot,
+              itemYFor(0),
+              theme,
+              itemAppearance,
+              index,
+              visibleSeries.length
+            )
           : createLineMarkup(itemChart, points, errors, itemYFor, theme, itemAppearance, plot);
       const highlightedMarkup = decoratePlotElements(markup, item, itemAppearance.dataColor);
       const seriesStyle = createPlotHighlightStyle(item, itemAppearance.dataColor);
@@ -3885,8 +5524,7 @@ function getFitConfigs(chart, theme, fallback) {
     const stage = Math.max(0, Math.floor(Number(requestedStage) || 0));
     const revealIndex = Number(chart.getAttribute?.('activeRevealIndex') ?? Infinity);
     if (revealIndex < stage) return { ...fit, draw: false };
-    if (stage > 0 && revealIndex !== stage)
-      return { ...fit, animation: '', bandAnimation: '' };
+    if (stage > 0 && revealIndex !== stage) return { ...fit, animation: '', bandAnimation: '' };
     return fit;
   };
   if (!Array.isArray(definitions) || definitions.length === 0)
@@ -3898,30 +5536,23 @@ function getFitConfigs(chart, theme, fallback) {
   );
   return definitions
     .filter((definition) => definition && typeof definition === 'object')
-    .map(
-      (definition) =>
-        stageConfig(getPlotAppearance(
+    .map((definition) =>
+      stageConfig(
+        getPlotAppearance(
           {
             getAttribute(name) {
               return name === 'plotStyle' ? { ...sharedStyle, ...definition.fields } : undefined;
             }
           },
           theme
-        ).fit, definition.fields?.['fit-reveal-stage'] ?? configuredStyle?.['fit-reveal-stage'])
+        ).fit,
+        definition.fields?.['fit-reveal-stage'] ?? configuredStyle?.['fit-reveal-stage']
+      )
     );
 }
 
 function scientificPlotFrame(chart, theme, marks, defs = '') {
-  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
-  const animation = String(style.animation ?? 'fade').toLowerCase();
-  const duration = normalizeAnimationTime(style['animation-duration'], '900ms');
-  const delay = normalizeAnimationTime(style['animation-delay'], '0ms');
-  const motion =
-    animation === 'draw'
-      ? `neopresent-chart-draw ${duration} ease-out ${delay} both`
-      : animation === 'rise' || animation === 'grow'
-        ? `neopresent-chart-grow ${duration} ease-out ${delay} both`
-        : `neopresent-chart-fade ${duration} ease-out ${delay} both`;
+  const motion = createSpecialPlotAnimation(chart, theme);
   const title = chart.title
     ? createChartTitle(chart.title, getPlotAppearance(chart, theme), theme)
     : null;
@@ -3932,7 +5563,7 @@ function scientificPlotFrame(chart, theme, marks, defs = '') {
       ...(title ? [title] : []),
       {
         tag: 'div',
-        html: `<svg viewBox="0 0 700 430" style="width:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg"><defs>${defs}</defs><g style="animation:${motion};transform-origin:center">${marks}</g><path d="M70 25V370H675" fill="none" stroke="${escapeSvgText(theme.border)}" stroke-width="2"/><text x="372" y="415" text-anchor="middle" fill="${escapeSvgText(theme.muted)}" font-size="22">${escapeSvgText(chart.xLabel ?? '')}</text><text x="20" y="198" text-anchor="middle" transform="rotate(-90 20 198)" fill="${escapeSvgText(theme.muted)}" font-size="22">${escapeSvgText(chart.yLabel ?? '')}</text></svg>`
+        html: `<svg viewBox="0 0 700 430" style="width:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg"><defs>${defs}</defs><g data-neopresent-special-animation="${escapeSvgText(String((chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {}).animation ?? ''))}" style="${motion}">${marks}</g><path d="M70 25V370H675" fill="none" stroke="${escapeSvgText(theme.border)}" stroke-width="2"/><text x="372" y="415" text-anchor="middle" fill="${escapeSvgText(theme.muted)}" font-size="22">${escapeSvgText(chart.xLabel ?? '')}</text><text x="20" y="198" text-anchor="middle" transform="rotate(-90 20 198)" fill="${escapeSvgText(theme.muted)}" font-size="22">${escapeSvgText(chart.yLabel ?? '')}</text></svg>`
       }
     ]
   };
@@ -3944,9 +5575,66 @@ function chartAttribute(chart, name, fallback) {
 
 function numericDomain(values) {
   const finite = values.filter(Number.isFinite);
+  if (finite.length === 0) return [0, 1];
   const minimum = Math.min(...finite);
   const maximum = Math.max(...finite);
   return [minimum, maximum === minimum ? minimum + 1 : maximum];
+}
+
+function createScalarFieldFrame(chart, theme, options) {
+  const { marks, defs = '', xDomain, yDomain, zDomain, palette, colorLabel = 'Value' } = options;
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const left = 82,
+    top = 28,
+    width = 520,
+    height = 330,
+    bottom = top + height;
+  const xTicks = createScientificTicks(xDomain[0], xDomain[1], 6);
+  const yTicks = createScientificTicks(yDomain[0], yDomain[1], 6);
+  const xFor = (value) =>
+    left + ((value - xDomain[0]) / Math.max(xDomain[1] - xDomain[0], Number.EPSILON)) * width;
+  const yFor = (value) =>
+    bottom - ((value - yDomain[0]) / Math.max(yDomain[1] - yDomain[0], Number.EPSILON)) * height;
+  const grid = `${xTicks.map((tick) => `<path d="M ${xFor(tick)} ${top} V ${bottom}" stroke="${theme.border}" opacity=".28" stroke-dasharray="4 5"/><text data-neopresent-field-x-tick="${tick}" x="${xFor(tick)}" y="${bottom + 24}" fill="${theme.muted}" font-size="15" text-anchor="middle">${formatChartValue(tick)}</text>`).join('')}${yTicks.map((tick) => `<path d="M ${left} ${yFor(tick)} H ${left + width}" stroke="${theme.border}" opacity=".28" stroke-dasharray="4 5"/><text data-neopresent-field-y-tick="${tick}" x="${left - 11}" y="${yFor(tick) + 5}" fill="${theme.muted}" font-size="15" text-anchor="end">${formatChartValue(tick)}</text>`).join('')}`;
+  const scaleId = `neopresent-field-scale-${String(chart.id).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const stops = palette.stops
+    .map(
+      (stop) =>
+        `<stop offset="${stop.offset * 100}%" stop-color="${stop.color}" stop-opacity="${stop.alpha}"/>`
+    )
+    .join('');
+  const colorbarX = 625 + safeNumber(style['heatmap-colorbar-offset-x'], 0);
+  const colorbarY = top + safeNumber(style['heatmap-colorbar-offset-y'], 0);
+  const colorbarWidth = Math.max(
+    6,
+    Math.min(200, safeOptionalNumber(style['heatmap-colorbar-width']) ?? 18)
+  );
+  const colorbarHeight = Math.max(
+    40,
+    Math.min(500, safeOptionalNumber(style['heatmap-colorbar-height']) ?? height)
+  );
+  const colorbarTextX = colorbarX + colorbarWidth + 8;
+  const colorbarLabelX = colorbarX + colorbarWidth + 41;
+  const colorbarLabelY = colorbarY + colorbarHeight / 2;
+  const colorbar = `<rect data-neopresent-field-colorbar="true" x="${colorbarX}" y="${colorbarY}" width="${colorbarWidth}" height="${colorbarHeight}" opacity="${safeAlpha(style['heatmap-colorbar-alpha'] ?? 1)}" fill="url(#${scaleId})"/><text x="${colorbarTextX}" y="${colorbarY + 6}" fill="${theme.muted}" font-size="14">${formatChartValue(zDomain[1])}</text><text x="${colorbarTextX}" y="${colorbarY + colorbarHeight}" fill="${theme.muted}" font-size="14">${formatChartValue(zDomain[0])}</text><text x="${colorbarLabelX}" y="${colorbarLabelY}" fill="${theme.foreground}" font-size="17" text-anchor="middle" transform="rotate(-90 ${colorbarLabelX} ${colorbarLabelY})">${renderSvgMath(colorLabel)}</text>`;
+  const xLabelX = left + width / 2 + safeNumber(style['x-label-offset-x'], 0);
+  const xLabelY = 418 + safeNumber(style['x-label-offset-y'], 0);
+  const yLabelX = 22 + safeNumber(style['y-label-offset-x'], 0);
+  const yLabelY = top + height / 2 + safeNumber(style['y-label-offset-y'], 0);
+  const axes = `<path data-neopresent-field-axes="true" d="M ${left} ${top} V ${bottom} H ${left + width} V ${top} Z" fill="none" stroke="${theme.border}" stroke-width="2"/><text data-neopresent-field-x-label="true" x="${xLabelX}" y="${xLabelY}" fill="${safeColor(style['x-label-color'], theme.foreground)}" fill-opacity="${safeAlpha(style['x-label-alpha'] ?? 1)}" font-family="${safeFont(style['x-label-font'], 'system-ui, sans-serif')}" font-size="${Math.max(10, safeNumber(style['x-label-size'], 20))}" text-anchor="middle">${renderSvgMath(chart.xLabel || 'x')}</text><text data-neopresent-field-y-label="true" x="${yLabelX}" y="${yLabelY}" fill="${safeColor(style['y-label-color'], theme.foreground)}" fill-opacity="${safeAlpha(style['y-label-alpha'] ?? 1)}" font-family="${safeFont(style['y-label-font'], 'system-ui, sans-serif')}" font-size="${Math.max(10, safeNumber(style['y-label-size'], 20))}" text-anchor="middle" transform="rotate(-90 ${yLabelX} ${yLabelY})">${renderSvgMath(chart.yLabel || 'y')}</text>`;
+  const appearance = getPlotAppearance(chart, theme);
+  const title = chart.title ? createChartTitle(chart.title, appearance, theme) : null;
+  return {
+    tag: 'div',
+    style: { width: '100%', maxWidth: '900px' },
+    cn: [
+      ...(title ? [title] : []),
+      {
+        tag: 'div',
+        html: `<svg aria-label="${escapeSvgText(chart.title || 'Scalar field plot')}" viewBox="0 0 720 440" style="width:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="${scaleId}" x1="0" y1="1" x2="0" y2="0">${stops}</linearGradient><clipPath id="${scaleId}-clip"><rect x="${left}" y="${top}" width="${width}" height="${height}"/></clipPath>${defs}</defs><g data-neopresent-special-animation="${escapeSvgText(String((chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {}).animation ?? ''))}" style="${createSpecialPlotAnimation(chart, theme)}">${grid}<g clip-path="url(#${scaleId}-clip)">${marks}</g>${axes}${colorbar}</g></svg>`
+      }
+    ]
+  };
 }
 
 function createContourView(chart, theme) {
@@ -3957,22 +5645,109 @@ function createContourView(chart, theme) {
   const levels = Math.max(2, Math.min(30, Number(style['contour-levels']) || 10));
   const palette = resolvePalette(style['heatmap-palette'] ?? 'kBird', style);
   const [zMin, zMax] = numericDomain(z);
-  const cellWidth = 605 / Math.max(1, x.length);
-  const cellHeight = 345 / Math.max(1, y.length);
-  const cells = z
-    .map((value, index) => {
-      const column = index % x.length;
-      const row = Math.floor(index / x.length);
-      if (row >= y.length) return '';
+  const xDomain = numericDomain(x),
+    yDomain = numericDomain(y);
+  const left = 82,
+    top = 28,
+    plotWidth = 520,
+    plotHeight = 330;
+  const xFor = (value) => left + ((value - xDomain[0]) / (xDomain[1] - xDomain[0])) * plotWidth;
+  const yFor = (value) =>
+    top + plotHeight - ((value - yDomain[0]) / (yDomain[1] - yDomain[0])) * plotHeight;
+  const fillContours = String(style['contour-fill'] ?? 'true').toLowerCase() !== 'false';
+  const cells = Array.from({ length: Math.max(0, y.length - 1) }, (_, row) =>
+    Array.from({ length: Math.max(0, x.length - 1) }, (_, column) => {
+      const cornerValues = [
+        z[row * x.length + column],
+        z[row * x.length + column + 1],
+        z[(row + 1) * x.length + column],
+        z[(row + 1) * x.length + column + 1]
+      ];
+      if (!cornerValues.every(Number.isFinite)) return '';
+      const value = cornerValues.reduce((sum, entry) => sum + entry, 0) / cornerValues.length;
       const level = Math.max(
         0,
         Math.min(levels - 1, Math.floor(((value - zMin) / (zMax - zMin)) * levels))
       );
       const color = samplePalette(palette, level / Math.max(1, levels - 1));
-      return `<rect x="${70 + column * cellWidth}" y="${25 + (y.length - row - 1) * cellHeight}" width="${cellWidth + 0.5}" height="${cellHeight + 0.5}" fill="${color}" stroke="${escapeSvgText(style['contour-line-color'] ?? color)}" stroke-width="${Number(style['contour-line-width']) || 0.5}"/>`;
+      const x0 = xFor(x[column]),
+        x1 = xFor(x[column + 1]);
+      const y0 = yFor(y[row]),
+        y1 = yFor(y[row + 1]);
+      const tip = `x: ${formatChartValue((x[column] + x[column + 1]) / 2)}; y: ${formatChartValue((y[row] + y[row + 1]) / 2)}; value: ${formatChartValue(value)}`;
+      return `<rect data-neopresent-mark-kind="contour-cell" data-neopresent-tooltip="${escapeSvgText(tip)}" x="${x0}" y="${y1}" width="${x1 - x0 + 0.5}" height="${y0 - y1 + 0.5}" fill="${fillContours ? color : 'transparent'}"><title>${escapeSvgText(tip)}</title></rect>`;
+    }).join('')
+  ).join('');
+  const samples = z
+    .map((value, index) => {
+      const column = index % x.length,
+        row = Math.floor(index / x.length);
+      if (row >= y.length || !Number.isFinite(value)) return '';
+      const tip = `x: ${formatChartValue(x[column])}; y: ${formatChartValue(y[row])}; value: ${formatChartValue(value)}`;
+      return `<circle data-neopresent-mark-kind="contour-sample" data-neopresent-tooltip="${escapeSvgText(tip)}" cx="${xFor(x[column])}" cy="${yFor(y[row])}" r="8" fill="transparent"><title>${escapeSvgText(tip)}</title></circle>`;
     })
     .join('');
-  return scientificPlotFrame(chart, theme, cells);
+  const lineColor = escapeSvgText(style['contour-line-color'] ?? theme.foreground);
+  const lineWidth = Number(style['contour-line-width']) || 1.4;
+  const isolines = Array.from(
+    { length: levels - 1 },
+    (_, levelIndex) => zMin + ((zMax - zMin) * (levelIndex + 1)) / levels
+  )
+    .map((threshold, levelIndex) => {
+      const segments = [];
+      for (let row = 0; row < y.length - 1; row += 1)
+        for (let column = 0; column < x.length - 1; column += 1) {
+          const corners = [
+            { x: x[column], y: y[row + 1], value: z[(row + 1) * x.length + column] },
+            { x: x[column + 1], y: y[row + 1], value: z[(row + 1) * x.length + column + 1] },
+            { x: x[column + 1], y: y[row], value: z[row * x.length + column + 1] },
+            { x: x[column], y: y[row], value: z[row * x.length + column] }
+          ];
+          if (!corners.every((corner) => Number.isFinite(corner.value))) continue;
+          const crossings = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0]
+          ].flatMap(([start, end]) => {
+            const a = corners[start],
+              b = corners[end];
+            if (a.value >= threshold === b.value >= threshold) return [];
+            const ratio = (threshold - a.value) / (b.value - a.value);
+            return [[xFor(a.x + (b.x - a.x) * ratio), yFor(a.y + (b.y - a.y) * ratio)]];
+          });
+          const pairs =
+            crossings.length === 2
+              ? [[crossings[0], crossings[1]]]
+              : crossings.length === 4 &&
+                  corners.reduce((sum, corner) => sum + corner.value, 0) / 4 >= threshold
+                ? [
+                    [crossings[0], crossings[1]],
+                    [crossings[2], crossings[3]]
+                  ]
+                : crossings.length === 4
+                  ? [
+                      [crossings[0], crossings[3]],
+                      [crossings[1], crossings[2]]
+                    ]
+                  : [];
+          for (const [start, end] of pairs) {
+            segments.push(
+              `<path data-neopresent-contour-level="${levelIndex + 1}" d="M ${start[0]} ${start[1]} L ${end[0]} ${end[1]}" fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" opacity=".82"/>`
+            );
+          }
+        }
+      return segments.join('');
+    })
+    .join('');
+  return createScalarFieldFrame(chart, theme, {
+    marks: cells + isolines + samples,
+    xDomain,
+    yDomain,
+    zDomain: [zMin, zMax],
+    palette,
+    colorLabel: style['heatmap-color-label'] ?? 'Value'
+  });
 }
 
 function createQuiverView(chart, theme) {
@@ -4109,15 +5884,28 @@ function createDensity2dView(chart, theme) {
   }
   const maximum = Math.max(...densities, 1);
   const palette = resolvePalette(style['density-palette'] ?? 'kViridis', style);
-  const width = 605 / grid;
-  const height = 345 / grid;
+  const width = 520 / grid;
+  const height = 330 / grid;
   const cells = densities
-    .map(
-      (density, index) =>
-        `<rect x="${70 + (index % grid) * width}" y="${25 + Math.floor(index / grid) * height}" width="${width + 0.4}" height="${height + 0.4}" fill="${samplePalette(palette, density / maximum)}"/>`
-    )
+    .map((density, index) => {
+      const column = index % grid,
+        row = Math.floor(index / grid);
+      const normalizedX = (column + 0.5) / grid,
+        normalizedY = (row + 0.5) / grid;
+      const sampleX = xMin + normalizedX * (xMax - xMin);
+      const sampleY = yMin + normalizedY * (yMax - yMin);
+      const tip = `x: ${formatChartValue(sampleX)}; y: ${formatChartValue(sampleY)}; density: ${formatChartValue(density)}`;
+      return `<rect data-neopresent-mark-kind="density2d-cell" data-neopresent-density-row="${row}" data-neopresent-tooltip="${escapeSvgText(tip)}" x="${82 + column * width}" y="${28 + (grid - row - 1) * height}" width="${width + 0.4}" height="${height + 0.4}" fill="${samplePalette(palette, density / maximum)}"><title>${escapeSvgText(tip)}</title></rect>`;
+    })
     .join('');
-  return scientificPlotFrame(chart, theme, cells);
+  return createScalarFieldFrame(chart, theme, {
+    marks: cells,
+    xDomain: [xMin, xMax],
+    yDomain: [yMin, yMax],
+    zDomain: [0, maximum],
+    palette,
+    colorLabel: style['heatmap-color-label'] ?? 'Density'
+  });
 }
 
 function createHexbinView(chart, theme) {
@@ -4357,17 +6145,18 @@ function createDiagramHighlightPlan(chart, style, prefix, fallbackTarget) {
   const revealTriggered = String(style['animation-trigger'] ?? '').toLowerCase() === 'reveal';
   const revealAnimate = chart.getAttribute?.('revealAnimate') !== false;
   const activeRevealIndex = Number(chart.getAttribute?.('activeRevealIndex') ?? Infinity);
-  const rawSteps = (definitions.length
-    ? definitions
-    : String(fallbackTarget ?? '')
-        .split(';')
-        .map((target) => target.trim())
-        .filter(Boolean)
-        .map((target) => ({ target })))
-    .filter((fields) => {
-      const stage = Math.max(0, Math.floor(Number(fields.stage) || 0));
-      return !revealTriggered || stage === 0 || stage === activeRevealIndex;
-    });
+  const rawSteps = (
+    definitions.length
+      ? definitions
+      : String(fallbackTarget ?? '')
+          .split(';')
+          .map((target) => target.trim())
+          .filter(Boolean)
+          .map((target) => ({ target }))
+  ).filter((fields) => {
+    const stage = Math.max(0, Math.floor(Number(fields.stage) || 0));
+    return !revealTriggered || stage === 0 || stage === activeRevealIndex;
+  });
   let cursor = 0;
   const steps = rawSteps.map((fields, index) => {
     const duration = diagramTime(
@@ -4494,9 +6283,7 @@ function createStandardModelView(chart, theme) {
     style['standard-model-quark-green'] ?? '#22c55e',
     style['standard-model-quark-blue'] ?? '#3b82f6'
   ];
-  const couplingColor = escapeSvgText(
-    style['standard-model-coupling-color'] ?? '#ef4444'
-  );
+  const couplingColor = escapeSvgText(style['standard-model-coupling-color'] ?? '#ef4444');
   const couplingFrameWidth = Math.max(
     0,
     Number(style['standard-model-coupling-frame-width'] ?? 0) || 0
@@ -4542,9 +6329,15 @@ function createStandardModelView(chart, theme) {
               (['quark', 'quarks'].includes(normalized) && family === 'quark') ||
               (['lepton', 'leptons'].includes(normalized) && family === 'lepton') ||
               (['fermion', 'fermions', 'matter'].includes(normalized) && fermion) ||
-              (['boson', 'bosons'].includes(normalized) &&
-                !fermion) ||
-              (['forcecarrier', 'forcecarriers', 'forceboson', 'forcebosons', 'interactionboson', 'interactionbosons'].includes(normalized) &&
+              (['boson', 'bosons'].includes(normalized) && !fermion) ||
+              ([
+                'forcecarrier',
+                'forcecarriers',
+                'forceboson',
+                'forcebosons',
+                'interactionboson',
+                'interactionbosons'
+              ].includes(normalized) &&
                 forceBoson) ||
               (['gaugeboson', 'gaugebosons', 'vectorboson', 'vectorbosons'].includes(normalized) &&
                 gaugeBoson) ||
@@ -4571,11 +6364,20 @@ function createStandardModelView(chart, theme) {
             target === String(family).toLowerCase() ||
             (['quark', 'quarks'].includes(normalized) && family === 'quark') ||
             (['lepton', 'leptons'].includes(normalized) && family === 'lepton') ||
-            (['boson', 'bosons', 'forcecarrier', 'forcecarriers'].includes(normalized) && Number(column) >= 3) ||
-            (['gaugeboson', 'gaugebosons', 'vectorboson', 'vectorbosons'].includes(normalized) && family === 'boson') ||
+            (['boson', 'bosons', 'forcecarrier', 'forcecarriers'].includes(normalized) &&
+              Number(column) >= 3) ||
+            (['gaugeboson', 'gaugebosons', 'vectorboson', 'vectorbosons'].includes(normalized) &&
+              family === 'boson') ||
             (['higgs', 'scalarboson', 'scalarbosons'].includes(normalized) && family === 'higgs') ||
-            (['gravity', 'graviton', 'hypothetical', 'tensorboson', 'tensorbosons'].includes(normalized) && family === 'gravity') ||
-            (Number(column) < 3 && [`generation${Number(column) + 1}`, `generation${['i', 'ii', 'iii'][Number(column)]}`].includes(normalized))
+            (['gravity', 'graviton', 'hypothetical', 'tensorboson', 'tensorbosons'].includes(
+              normalized
+            ) &&
+              family === 'gravity') ||
+            (Number(column) < 3 &&
+              [
+                `generation${Number(column) + 1}`,
+                `generation${['i', 'ii', 'iii'][Number(column)]}`
+              ].includes(normalized))
           );
         })
       );
@@ -4780,7 +6582,14 @@ function createPeriodicTableView(chart, theme) {
       diagramRevealStyle(chart, (targets) =>
         targets.some((target) => {
           const normalized = target.replace(/[\s_-]+/g, '');
-          const metal = ['alkali', 'alkaline', 'transition', 'post-transition', 'lanthanide', 'actinide'].includes(category);
+          const metal = [
+            'alkali',
+            'alkaline',
+            'transition',
+            'post-transition',
+            'lanthanide',
+            'actinide'
+          ].includes(category);
           const nonmetal = ['nonmetal', 'halogen', 'noble'].includes(category);
           return (
             target === symbol.toLowerCase() ||
@@ -5051,15 +6860,28 @@ function createSurfaceView(chart, theme) {
   const ys = chart.getAttribute?.('heatmapYValues') ?? [];
   const xs = chart.xValues ?? [];
   const count = Math.min(xs.length, ys.length, chart.values.length);
-  const xValues = [...new Set(xs.slice(0, count))];
-  const yValues = [...new Set(ys.slice(0, count))];
+  const gridShape = chart.getAttribute?.('surfaceGridShape');
+  const structuredGrid =
+    Number.isInteger(gridShape?.columns) &&
+    Number.isInteger(gridShape?.rows) &&
+    gridShape.columns >= 2 &&
+    gridShape.rows >= 2 &&
+    gridShape.columns * gridShape.rows <= count;
+  const xValues = structuredGrid
+    ? createScientificTicks(Math.min(...xs), Math.max(...xs), 5)
+    : [...new Set(xs.slice(0, count))];
+  const yValues = structuredGrid
+    ? createScientificTicks(Math.min(...ys), Math.max(...ys), 5)
+    : [...new Set(ys.slice(0, count))];
+  const columnCount = structuredGrid ? gridShape.columns : xValues.length;
+  const rowCount = structuredGrid ? gridShape.rows : yValues.length;
   const style = chart.getAttribute?.('plotStyle') ?? {};
   const surfaceOverlays = (chart.getAttribute?.('functionOverlays') ?? []).filter(
     (item) => item?.dimension === 3
   );
   const width = 760;
   const height = 470;
-  if (xValues.length < 2 || yValues.length < 2) {
+  if (columnCount < 2 || rowCount < 2) {
     return {
       tag: 'p',
       text: 'A surface plot requires at least a 2 × 2 grid of x, y, and value points.',
@@ -5067,6 +6889,10 @@ function createSurfaceView(chart, theme) {
     };
   }
   const zValues = chart.values.slice(0, count);
+  const xMinimum = Math.min(...xs.slice(0, count));
+  const xMaximum = Math.max(...xs.slice(0, count));
+  const yMinimum = Math.min(...ys.slice(0, count));
+  const yMaximum = Math.max(...ys.slice(0, count));
   const overlayZValues = surfaceOverlays.flatMap((item) =>
     Array.isArray(item.values) ? item.values.filter(Number.isFinite) : []
   );
@@ -5080,6 +6906,9 @@ function createSurfaceView(chart, theme) {
   const meshColor = String(style['surface-mesh-color'] ?? 'rgba(15,23,42,.72)');
   const meshWidth = Math.max(0, Number(style['surface-mesh-width']) || 1.25);
   const alpha = Math.max(0, Math.min(1, Number(style['surface-alpha'] ?? 1)));
+  const surfaceBackground = String(
+    style['surface-background'] ?? style['plot-background'] ?? theme.background
+  );
   const zLabel = String(style['surface-z-label'] ?? 'Value');
   const styleNumber = (key, fallback) =>
     Number.isFinite(Number(style[key])) ? Number(style[key]) : fallback;
@@ -5137,10 +6966,14 @@ function createSurfaceView(chart, theme) {
     };
   };
   for (let index = 0; index < count; index += 1) {
-    const column = xValues.indexOf(xs[index]);
-    const row = yValues.indexOf(ys[index]);
-    const normalizedX = column / (xValues.length - 1);
-    const normalizedY = row / (yValues.length - 1);
+    const column = structuredGrid ? index % columnCount : xValues.indexOf(xs[index]);
+    const row = structuredGrid ? Math.floor(index / columnCount) : yValues.indexOf(ys[index]);
+    const normalizedX = structuredGrid
+      ? (xs[index] - xMinimum) / Math.max(xMaximum - xMinimum, Number.EPSILON)
+      : column / (columnCount - 1);
+    const normalizedY = structuredGrid
+      ? (ys[index] - yMinimum) / Math.max(yMaximum - yMinimum, Number.EPSILON)
+      : row / (rowCount - 1);
     const normalizedZ = (zValues[index] - zMinimum) / zSpan;
     pointByGrid.set(`${column}:${row}`, {
       ...project(normalizedX, normalizedY, normalizedZ),
@@ -5159,8 +6992,8 @@ function createSurfaceView(chart, theme) {
     return samplePalette(palette, t);
   };
   const faces = [];
-  for (let row = 0; row < yValues.length - 1; row += 1) {
-    for (let column = 0; column < xValues.length - 1; column += 1) {
+  for (let row = 0; row < rowCount - 1; row += 1) {
+    for (let column = 0; column < columnCount - 1; column += 1) {
       const points = [
         pointByGrid.get(`${column}:${row}`),
         pointByGrid.get(`${column + 1}:${row}`),
@@ -5180,15 +7013,37 @@ function createSurfaceView(chart, theme) {
     const overlayYs = Array.isArray(overlay.yValues) ? overlay.yValues : [];
     const overlayValues = Array.isArray(overlay.values) ? overlay.values : [];
     const overlayCount = Math.min(overlayXs.length, overlayYs.length, overlayValues.length);
-    const uniqueXs = [...new Set(overlayXs.slice(0, overlayCount))];
-    const uniqueYs = [...new Set(overlayYs.slice(0, overlayCount))];
-    if (uniqueXs.length < 2 || uniqueYs.length < 2) return;
+    const overlayStructured =
+      Number.isInteger(overlay.columns) &&
+      Number.isInteger(overlay.rows) &&
+      overlay.columns >= 2 &&
+      overlay.rows >= 2 &&
+      overlay.columns * overlay.rows <= overlayCount;
+    const uniqueXs = overlayStructured ? [] : [...new Set(overlayXs.slice(0, overlayCount))];
+    const uniqueYs = overlayStructured ? [] : [...new Set(overlayYs.slice(0, overlayCount))];
+    const overlayColumns = overlayStructured ? overlay.columns : uniqueXs.length;
+    const overlayRows = overlayStructured ? overlay.rows : uniqueYs.length;
+    if (overlayColumns < 2 || overlayRows < 2) return;
+    const overlayXMinimum = Math.min(...overlayXs.slice(0, overlayCount));
+    const overlayXMaximum = Math.max(...overlayXs.slice(0, overlayCount));
+    const overlayYMinimum = Math.min(...overlayYs.slice(0, overlayCount));
+    const overlayYMaximum = Math.max(...overlayYs.slice(0, overlayCount));
     const overlayPoints = new Map();
     for (let index = 0; index < overlayCount; index += 1) {
-      const column = uniqueXs.indexOf(overlayXs[index]);
-      const row = uniqueYs.indexOf(overlayYs[index]);
-      const normalizedX = column / (uniqueXs.length - 1);
-      const normalizedY = row / (uniqueYs.length - 1);
+      const column = overlayStructured
+        ? index % overlayColumns
+        : uniqueXs.indexOf(overlayXs[index]);
+      const row = overlayStructured
+        ? Math.floor(index / overlayColumns)
+        : uniqueYs.indexOf(overlayYs[index]);
+      const normalizedX = overlayStructured
+        ? (overlayXs[index] - overlayXMinimum) /
+          Math.max(overlayXMaximum - overlayXMinimum, Number.EPSILON)
+        : column / (overlayColumns - 1);
+      const normalizedY = overlayStructured
+        ? (overlayYs[index] - overlayYMinimum) /
+          Math.max(overlayYMaximum - overlayYMinimum, Number.EPSILON)
+        : row / (overlayRows - 1);
       const normalizedZ = (overlayValues[index] - zMinimum) / zSpan;
       overlayPoints.set(`${column}:${row}`, {
         ...project(normalizedX, normalizedY, normalizedZ),
@@ -5209,8 +7064,8 @@ function createSurfaceView(chart, theme) {
     const overlayAlpha = Math.max(0, Math.min(1, Number(overlay.alpha || 0.55)));
     const overlayMeshColor = String(overlay.meshColor || overlay.color || '#f8fafc');
     const overlayMeshWidth = Math.max(0, Number(overlay.meshWidth || 1.5));
-    for (let row = 0; row < uniqueYs.length - 1; row += 1) {
-      for (let column = 0; column < uniqueXs.length - 1; column += 1) {
+    for (let row = 0; row < overlayRows - 1; row += 1) {
+      for (let column = 0; column < overlayColumns - 1; column += 1) {
         const points = [
           overlayPoints.get(`${column}:${row}`),
           overlayPoints.get(`${column + 1}:${row}`),
@@ -5374,66 +7229,68 @@ function createSurfaceView(chart, theme) {
     : '';
   return {
     tag: 'div',
-    html: `<svg data-neopresent-surface="true" data-surface-id="${escapeSvgText(chart.id)}" data-surface-azimuth="${azimuth}" data-surface-elevation="${elevation}" data-surface-zoom="${zoom}" data-surface-interactive="${interactive}" viewBox="0 0 ${width} ${height}" style="width:100%;max-width:${width}px;touch-action:none;cursor:${interactive ? 'grab' : 'default'}" xmlns="http://www.w3.org/2000/svg"><defs>${legend}</defs><rect width="100%" height="100%" fill="${theme.background}"/><g data-neopresent-surface-scene="true" transform="translate(350 235) scale(${zoom}) translate(-350 -235)"><g data-neopresent-surface-faces="true" data-surface-animation="${surfaceAnimation}"${surfaceGroupAnimation}>${polygons}</g>${axes}${xTicks}${yTicks}${zTicks}${labels}</g>${paletteMarkup}</svg>`
+    html: `<svg data-neopresent-surface="true" data-surface-id="${escapeSvgText(chart.id)}" data-surface-azimuth="${azimuth}" data-surface-elevation="${elevation}" data-surface-zoom="${zoom}" data-surface-interactive="${interactive}" viewBox="0 0 ${width} ${height}" style="width:100%;max-width:${width}px;touch-action:none;cursor:${interactive ? 'grab' : 'default'}" xmlns="http://www.w3.org/2000/svg"><defs>${legend}</defs><rect data-neopresent-surface-background="true" width="100%" height="100%" fill="${escapeSvgText(surfaceBackground)}"/><g data-neopresent-surface-scene="true" transform="translate(350 235) scale(${zoom}) translate(-350 -235)"><g data-neopresent-surface-faces="true" data-surface-animation="${surfaceAnimation}"${surfaceGroupAnimation}>${polygons}</g>${axes}${xTicks}${yTicks}${zTicks}${labels}</g>${paletteMarkup}</svg>`
   };
 }
 
 function getRenderableSeries(chart) {
   const base = getBaseRenderableSeries(chart);
   const overlays = chart.getAttribute?.('functionOverlays');
-  const combined = !Array.isArray(overlays) ? base : [
-    ...base,
-    ...overlays
-      .filter((item) => item?.dimension === 2)
-      .map((item, index) => ({
-        color: String(item.color ?? ''),
-        animation: String(item.animation ?? ''),
-        animationDelay: String(item.animationDelay ?? ''),
-        animationDuration: String(item.animationDuration ?? ''),
-        animationEasing: String(item.animationEasing ?? ''),
-        highlightEffect: String(item.highlightEffect ?? ''),
-        highlightColor: String(item.highlightColor ?? ''),
-        highlightDuration: String(item.highlightDuration ?? ''),
-        highlightDelay: String(item.highlightDelay ?? ''),
-        highlightIndex: String(item.highlightIndex ?? ''),
-        legend: String(item.legend ?? ''),
-        legendOrder: String(item.legendOrder ?? ''),
-        visible: true,
-        dataAlpha: String(item.dataAlpha ?? ''),
-        dataSize: String(item.dataSize ?? ''),
-        symbol: '',
-        lineStyle: String(item.lineStyle ?? ''),
-        draw: String(item.draw ?? 'L'),
-        band: '',
-        bandColor: '',
-        bandAlpha: '',
-        bandLine: '',
-        yAxis: 'left',
-        fitAlpha: '',
-        fitAnimation: '',
-        fitAnimationDelay: '',
-        fitAnimationDuration: '',
-        fitAnimationEasing: '',
-        fitColor: '',
-        fitWidth: '',
-        errorValues: [],
-        errorLowValues: [],
-        errorHighValues: [],
-        xErrorValues: [],
-        xErrorLowValues: [],
-        xErrorHighValues: [],
-        pointLabelValues: [],
-        bubbleSizes: [],
-        uncertaintyLayers: [],
-        labels: Array.isArray(item.labels) ? item.labels.map(String) : [],
-        name: String(item.name ?? `Function ${index + 1}`),
-        smooth: false,
-        trendline: false,
-        values: Array.isArray(item.values) ? item.values.filter(Number.isFinite) : [],
-        xValues: Array.isArray(item.xValues) ? item.xValues.filter(Number.isFinite) : []
-      }))
-      .filter((item) => item.values.length > 0)
-  ];
+  const combined = !Array.isArray(overlays)
+    ? base
+    : [
+        ...base,
+        ...overlays
+          .filter((item) => item?.dimension === 2)
+          .map((item, index) => ({
+            color: String(item.color ?? ''),
+            animation: String(item.animation ?? ''),
+            animationDelay: String(item.animationDelay ?? ''),
+            animationDuration: String(item.animationDuration ?? ''),
+            animationEasing: String(item.animationEasing ?? ''),
+            highlightEffect: String(item.highlightEffect ?? ''),
+            highlightColor: String(item.highlightColor ?? ''),
+            highlightDuration: String(item.highlightDuration ?? ''),
+            highlightDelay: String(item.highlightDelay ?? ''),
+            highlightIndex: String(item.highlightIndex ?? ''),
+            legend: String(item.legend ?? ''),
+            legendOrder: String(item.legendOrder ?? ''),
+            visible: true,
+            dataAlpha: String(item.dataAlpha ?? ''),
+            dataSize: String(item.dataSize ?? ''),
+            symbol: '',
+            lineStyle: String(item.lineStyle ?? ''),
+            draw: String(item.draw ?? 'L'),
+            band: '',
+            bandColor: '',
+            bandAlpha: '',
+            bandLine: '',
+            yAxis: 'left',
+            fitAlpha: '',
+            fitAnimation: '',
+            fitAnimationDelay: '',
+            fitAnimationDuration: '',
+            fitAnimationEasing: '',
+            fitColor: '',
+            fitWidth: '',
+            errorValues: [],
+            errorLowValues: [],
+            errorHighValues: [],
+            xErrorValues: [],
+            xErrorLowValues: [],
+            xErrorHighValues: [],
+            pointLabelValues: [],
+            bubbleSizes: [],
+            uncertaintyLayers: [],
+            labels: Array.isArray(item.labels) ? item.labels.map(String) : [],
+            name: String(item.name ?? `Function ${index + 1}`),
+            smooth: false,
+            trendline: false,
+            values: Array.isArray(item.values) ? item.values.filter(Number.isFinite) : [],
+            xValues: Array.isArray(item.xValues) ? item.xValues.filter(Number.isFinite) : []
+          }))
+          .filter((item) => item.values.length > 0)
+      ];
   const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
   if (String(style['animation-trigger'] ?? '').toLowerCase() !== 'reveal') return combined;
   const revealIndex = Number(chart.getAttribute?.('activeRevealIndex') ?? Infinity);
@@ -5567,6 +7424,7 @@ function getBaseRenderableSeries(chart) {
         ),
         labels: Array.isArray(item?.labels) ? item.labels.map(String) : [],
         name: String(item?.name ?? `Series ${index + 1}`),
+        geoValue: Number.isFinite(item?.geoValue) ? Number(item.geoValue) : null,
         smooth: item?.smooth === true,
         trendline: item?.trendline === true,
         values: Array.isArray(item?.values) ? item.values.filter(Number.isFinite) : [],
@@ -5579,7 +7437,9 @@ function getBaseRenderableSeries(chart) {
         labels:
           item.labels.length === item.values.length
             ? item.labels
-            : item.values.map((_, index) => String(index + 1))
+            : chart.labels?.length === item.values.length
+              ? Array.from(chart.labels)
+              : item.values.map((_, index) => String(index + 1))
       }));
   }
   return [
@@ -6500,7 +8360,10 @@ function createFitMarkup(fit, xFor, yFor, appearance, plot) {
     ? rawSummaryY
     : Math.max(
         plot.top + fit.config.labelSize,
-        Math.min(plot.bottom - 6 - Math.max(0, summaryLines.length - 1) * summaryLineHeight, rawSummaryY)
+        Math.min(
+          plot.bottom - 6 - Math.max(0, summaryLines.length - 1) * summaryLineHeight,
+          rawSummaryY
+        )
       );
   const summaryAnchor = hasPosition
     ? { left: 'start', center: 'middle', right: 'end' }[fit.config.labelAlign]
@@ -6628,7 +8491,7 @@ function createPlotAnnotations(chart, plot, appearance, fits = []) {
       const anchor = ['left', 'center', 'right'].includes(String(item.align))
         ? { left: 'start', center: 'middle', right: 'end' }[item.align]
         : 'start';
-      const requestedAnimation = String(reveal.animate ? item.animation ?? '' : '')
+      const requestedAnimation = String(reveal.animate ? (item.animation ?? '') : '')
         .trim()
         .toLowerCase();
       const animation = ['fade', 'rise', 'grow'].includes(requestedAnimation)
@@ -7422,7 +9285,9 @@ function safeDimension(value, fallback) {
 function normalizeColumnTracks(value, count) {
   if (!Array.isArray(value) || value.length !== count || count < 1) return null;
   const tracks = value.map((entry) => {
-    const text = String(entry ?? '').trim().toLowerCase();
+    const text = String(entry ?? '')
+      .trim()
+      .toLowerCase();
     if (text === 'auto') return 'auto';
     const match = text.match(/^(\d+(?:\.\d+)?)(%|fr|px|rem|em)?$/);
     if (!match || Number(match[1]) <= 0) return null;
@@ -8996,18 +10861,36 @@ function getDrawMode(value, kind = 'line') {
   return kind === 'scatter' ? 'P' : 'LP';
 }
 
-function createBarMarkup(chart, points, plot, baseline, theme, appearance) {
-  const barWidth = Math.min(90, (plot.width / chart.values.length) * 0.68);
+function createBarMarkup(
+  chart,
+  points,
+  plot,
+  baseline,
+  theme,
+  appearance,
+  seriesIndex = 0,
+  seriesCount = 1
+) {
+  const categoryWidth = plot.width / Math.max(chart.values.length, 1);
+  const groupWidth = Math.min(categoryWidth * 0.76, 110 * Math.max(seriesCount, 1));
+  const barGap = Math.min(5, groupWidth * 0.025);
+  const barWidth = Math.max(2, (groupWidth - barGap * (seriesCount - 1)) / seriesCount);
+  const groupStartOffset = -groupWidth / 2 + barWidth / 2;
   return points
     .map((point, index) => {
+      const categoryCenter = plot.left + (index + 0.5) * categoryWidth;
+      const x = categoryCenter + groupStartOffset + seriesIndex * (barWidth + barGap);
       const y = point.y;
       const height = Math.abs(baseline - y);
       const top = Math.min(baseline, y);
       const color = chart.values[index] < 0 ? '#fb7185' : appearance.dataColor;
-      return `<rect data-neopresent-tooltip="${escapeSvgText(`${chart.labels[index]}: ${formatChartValue(chart.values[index])}`)}" style="${createDataAnimation(appearance, index, points.length, 'center bottom')}" x="${point.x - barWidth / 2}" y="${top}" width="${barWidth}" height="${Math.max(height, 2)}" rx="5" fill="${color}">
-      <title>${escapeSvgText(`${chart.labels[index]}: ${formatChartValue(chart.values[index])}`)}</title>
+      const category = chart.labels[index] ?? String(index + 1);
+      const tooltip = `${seriesCount > 1 ? `${chart.name} · ` : ''}${category}: ${formatChartValue(chart.values[index])}`;
+      const animationIndex = seriesIndex * points.length + index;
+      return `<rect data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-bar-series="${seriesIndex}" data-neopresent-bar-category="${index}" style="${createDataAnimation(appearance, animationIndex, points.length * seriesCount, 'center bottom')}" x="${x - barWidth / 2}" y="${top}" width="${barWidth}" height="${Math.max(height, 2)}" rx="5" fill="${color}">
+      <title>${escapeSvgText(tooltip)}</title>
     </rect>
-    <text x="${point.x}" y="${chart.values[index] < 0 ? y + 18 : y - 10}" fill="${appearance.valueColor}" font-family="${appearance.valueFont}" font-size="${appearance.valueSize}" font-weight="700" text-anchor="middle">${formatChartValue(chart.values[index])}</text>`;
+    <text x="${x}" y="${chart.values[index] < 0 ? y + 18 : y - 10}" fill="${appearance.valueColor}" font-family="${appearance.valueFont}" font-size="${appearance.valueSize}" font-weight="700" text-anchor="middle">${formatChartValue(chart.values[index])}</text>`;
     })
     .join('');
 }
@@ -9175,7 +11058,43 @@ function formatScaleTick(value, logarithmic) {
 }
 
 function renderSvgMath(value) {
-  const source = String(value);
+  const replacements = {
+    alpha: 'α',
+    beta: 'β',
+    gamma: 'γ',
+    delta: 'δ',
+    epsilon: 'ε',
+    theta: 'θ',
+    lambda: 'λ',
+    mu: 'μ',
+    pi: 'π',
+    rho: 'ρ',
+    sigma: 'σ',
+    tau: 'τ',
+    phi: 'φ',
+    omega: 'ω',
+    Delta: 'Δ',
+    Gamma: 'Γ',
+    Lambda: 'Λ',
+    Sigma: 'Σ',
+    Phi: 'Φ',
+    Omega: 'Ω',
+    pm: '±',
+    times: '×',
+    cdot: '·',
+    infinity: '∞',
+    infty: '∞',
+    le: '≤',
+    ge: '≥',
+    log: 'log',
+    ln: 'ln',
+    exp: 'exp',
+    sqrt: '√'
+  };
+  const source = String(value)
+    .replace(/\$\$([^$]+)\$\$|\$([^$\n]+)\$/g, (_match, display, inline) => display ?? inline)
+    .replace(/\\(?:mathrm|text)\{([^{}]*)\}/g, '$1')
+    .replace(/\\([A-Za-z]+)/g, (match, command) => replacements[command] ?? match);
   const pattern = /([_^])(?:\{([^}]+)\}|([^\s]))/g;
   let result = '';
   let cursor = 0;

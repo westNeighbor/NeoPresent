@@ -72,11 +72,16 @@ When no presenter is connected, the viewer also owns:
 | `Space`  | Pause or resume slide animations |
 | `L`      | Toggle laser                     |
 | `S`      | Toggle spotlight                 |
+| `Z`      | Toggle liquid-glass magnifier    |
 | `A`      | Toggle annotation                |
 | `E`      | Toggle annotation eraser         |
 | `B`      | Blank or resume the screen       |
 
-With a presenter connected, viewer-side `Space`, `T`, `V`, `A`, `E`, `B`, `L`, and `S` are disabled so the two windows cannot create conflicting state.
+With a presenter connected, viewer-side `Space`, `T`, `V`, `A`, `E`, `B`, `L`, `S`, and `Z` are disabled so the two windows cannot create conflicting state.
+
+## Liquid-glass magnifier
+
+Press `Z` to place a circular magnifier over the current pointer position. It uses a frosted glass rim, but enlarges the underlying slide normally—there is no refractive distortion of text, equations, or plots. In presenter mode, move over the current-slide preview to position the audience lens; the **Magnify** control mirrors the same shortcut. While it is active, use its **Zoom** (1.2–3.0×) and **Size** (160–420 px) controls to tune the audience lens live.
 
 ## Presenter shortcuts
 
@@ -93,6 +98,7 @@ With a presenter connected, viewer-side `Space`, `T`, `V`, `A`, `E`, `B`, `L`, a
 | `M`                          | Bookmark the current slide                           |
 | `L`                          | Toggle laser                                         |
 | `S`                          | Toggle spotlight                                     |
+| `Z`                          | Toggle audience liquid-glass magnifier               |
 | `A`                          | Toggle annotation                                    |
 | `E`                          | Toggle annotation eraser                             |
 | `B`                          | Blank or resume the audience screen                  |

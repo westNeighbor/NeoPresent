@@ -17,7 +17,7 @@ Use this page as the documentation map. Each guide is intentionally focused so y
 | [Authoring](authoring.md)                            | Slides, includes, headings, lists, tables, math, inline styles, notes, references, and utility blocks                      |
 | [Layout and themes](layout-and-themes.md)            | Alignment, columns, groups, sizing, offsets, aspect ratio, backgrounds, TOC, page numbers, footers, logos, and themes      |
 | [Media and diagrams](media-and-diagrams.md)          | Images, PDF pages, PDF inspection, video, audio, web embeds, Mermaid, Feynman, Standard Model, and periodic table          |
-| [Plotting](plotting.md)                              | Scatter, line, histogram, bar, heatmap, surface, series, axes, errors, fits, legends, references, and external data        |
+| [Plotting](plotting.md)                              | Scatter, line, histogram, bar, pie, radar, heatmap, surface, series, axes, errors, fits, legends, and external data        |
 | [Complete plot settings](plot-settings-reference.md) | Source-generated inventory of every plot key plus all marker, ROOT symbol, line-style, draw-mode, and entry choices        |
 | [Complete non-plot settings](settings-reference.md)  | Deck/slide directives, visual effects, layouts, tables, media, code, Feynman, annotation, and CLI controls                 |
 | [Animation](animations.md)                           | Slide motion, list and fragment reveals, block replacement, table and plot animation, internal stages, and synchronization |

@@ -171,6 +171,61 @@
         writing-mode: vertical-lr;
       }
 
+      /* A sharp content magnifier with a liquid-glass rim. The slide inside
+       * the lens is enlarged normally; the glass is decorative only, so text
+       * and scientific plots are never optically distorted. */
+      .neopresent-magnifier {
+        backdrop-filter: blur(1px) saturate(1.18);
+        -webkit-backdrop-filter: blur(1px) saturate(1.18);
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.46), transparent 29%, rgba(255, 255, 255, 0.1)),
+          rgba(255, 255, 255, 0.08);
+        border: 3px solid rgba(255, 255, 255, 0.82);
+        border-radius: 50%;
+        box-shadow:
+          0 0 0 1px rgba(15, 23, 42, 0.35),
+          0 14px 32px rgba(15, 23, 42, 0.34),
+          inset 0 2px 5px rgba(255, 255, 255, 0.72),
+          inset 0 -5px 10px rgba(15, 23, 42, 0.15);
+        height: 260px;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        position: fixed;
+        transform: translate(-50%, -50%);
+        transition: opacity 100ms ease-out;
+        width: 260px;
+        z-index: 10002;
+      }
+
+      .neopresent-magnifier::after {
+        border: 1px solid rgba(255, 255, 255, 0.64);
+        border-radius: inherit;
+        content: '';
+        inset: 6px;
+        pointer-events: none;
+        position: absolute;
+        z-index: 2;
+      }
+
+      .neopresent-magnifier-content {
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        position: absolute;
+      }
+
+      .neopresent-magnifier-slide {
+        isolation: isolate;
+        left: 0;
+        margin: 0 !important;
+        max-height: none !important;
+        max-width: none !important;
+        position: absolute !important;
+        top: 0;
+        transform-origin: top left !important;
+      }
+
       @keyframes neopresent-fade-in {
         from {
           opacity: 0;
@@ -878,6 +933,10 @@
       let spotlightScreen;
       let spotlightRing;
       let progressIndicator;
+      let magnifier;
+      let magnifierContent;
+      let magnifierSource;
+      let magnifierSlide;
       const spotlightRingStyle = {
         ringColor: '#ff3b30',
         ringVisible: false,
@@ -890,10 +949,12 @@
       let activeAnnotationPath;
       let standaloneAudienceBlanked = false;
       let standaloneLaserEnabled = false;
+      let standaloneMagnifierEnabled = false;
       let standaloneSpotlightEnabled = false;
       let standaloneAnnotationEnabled = false;
       let standaloneAnnotationEraserEnabled = false;
       let standalonePointerPosition = { x: 0.5, y: 0.5 };
+      let latestMagnifierPointer = { x: 0.5, y: 0.5, visible: false };
       let presenterLastSeenAt = 0;
       let audienceSlideIndex = 0;
       let audienceOverviewActive = false;
@@ -1538,6 +1599,83 @@
         laserPointer.style.opacity = '1';
       };
 
+      const copyMagnifierCanvases = (source, clone) => {
+        const sourceCanvases = source.querySelectorAll('canvas');
+        const cloneCanvases = clone.querySelectorAll('canvas');
+        sourceCanvases.forEach((canvas, index) => {
+          const target = cloneCanvases[index];
+          if (!target || canvas.width === 0 || canvas.height === 0) return;
+          try {
+            target.width = canvas.width;
+            target.height = canvas.height;
+            target.getContext('2d')?.drawImage(canvas, 0, 0);
+          } catch {
+            // A cross-origin canvas cannot be copied, but its surrounding
+            // vector/DOM content remains useful inside the lens.
+          }
+        });
+      };
+
+      const refreshMagnifierSlide = (source, bounds) => {
+        if (!magnifierContent || !source) return;
+        const clone = source.cloneNode(true);
+        clone.classList.add('neopresent-magnifier-slide');
+        clone.removeAttribute('id');
+        clone.removeAttribute('data-neo-id');
+        clone.querySelectorAll('[id], [data-neo-id]').forEach((node) => {
+          node.removeAttribute('id');
+          node.removeAttribute('data-neo-id');
+        });
+        copyMagnifierCanvases(source, clone);
+        Object.assign(clone.style, {
+          height: `${bounds.height}px`,
+          minHeight: `${bounds.height}px`,
+          minWidth: `${bounds.width}px`,
+          width: `${bounds.width}px`
+        });
+        magnifierContent.replaceChildren(clone);
+        magnifierSource = source;
+        magnifierSlide = clone;
+      };
+
+      const updateMagnifier = (pointer = {}) => {
+        latestMagnifierPointer = { ...latestMagnifierPointer, ...pointer };
+        const { x, y, visible } = latestMagnifierPointer;
+        const source = getPresentationSlide();
+        const bounds = source?.getBoundingClientRect();
+        if (!visible || !source || !bounds || !Number.isFinite(x) || !Number.isFinite(y)) {
+          if (magnifier) magnifier.style.opacity = '0';
+          return;
+        }
+        if (!magnifier) {
+          magnifier = document.createElement('div');
+          magnifier.className = 'neopresent-magnifier';
+          magnifier.setAttribute('aria-hidden', 'true');
+          magnifierContent = document.createElement('div');
+          magnifierContent.className = 'neopresent-magnifier-content';
+          magnifier.append(magnifierContent);
+          document.body.append(magnifier);
+        }
+        if (magnifierSource !== source || !magnifierSlide?.isConnected) {
+          refreshMagnifierSlide(source, bounds);
+        }
+        const requestedZoom = Number(latestMagnifierPointer.magnifierZoom);
+        const requestedSize = Number(latestMagnifierPointer.magnifierSize);
+        const zoom = Number.isFinite(requestedZoom)
+          ? Math.max(1.2, Math.min(3, requestedZoom))
+          : 1.7;
+        const size = Number.isFinite(requestedSize)
+          ? Math.max(160, Math.min(420, requestedSize))
+          : 260;
+        const radius = size / 2;
+        magnifier.style.height = `${size}px`;
+        magnifier.style.width = `${size}px`;
+        magnifier.style.left = `${bounds.left + x * bounds.width}px`;
+        magnifier.style.top = `${bounds.top + y * bounds.height}px`;
+        magnifierSlide.style.transform = `translate(${radius - x * bounds.width * zoom}px, ${radius - y * bounds.height * zoom}px) scale(${zoom})`;
+        magnifier.style.opacity = '1';
+      };
+
       const updateAnnotationCursor = ({
         x,
         y,
@@ -1598,6 +1736,7 @@
         const point = standalonePointerPoint(event);
         if (!point) {
           if (standaloneLaserEnabled) updateLaserPointer({ visible: false });
+          if (standaloneMagnifierEnabled) updateMagnifier({ visible: false });
           if (standaloneSpotlightEnabled)
             updateSpotlightScreen({
               ...standalonePointerPosition,
@@ -1609,6 +1748,7 @@
         }
         standalonePointerPosition = point;
         if (standaloneLaserEnabled) updateLaserPointer({ ...point, symbol: '', visible: true });
+        if (standaloneMagnifierEnabled) updateMagnifier({ ...point, visible: true });
         if (standaloneSpotlightEnabled)
           updateSpotlightScreen({ ...point, size: 14, visible: true });
         if (standaloneAnnotationEnabled || standaloneAnnotationEraserEnabled)
@@ -1635,12 +1775,14 @@
         if (wasOpen) return;
         standaloneAudienceBlanked = false;
         standaloneLaserEnabled = false;
+        standaloneMagnifierEnabled = false;
         standaloneSpotlightEnabled = false;
         standaloneAnnotationEnabled = false;
         standaloneAnnotationEraserEnabled = false;
         activeAnnotationPath = undefined;
         updateBlackoutScreen(false);
         updateLaserPointer({ visible: false });
+        updateMagnifier({ visible: false });
         updateAnnotationCursor({ visible: false });
         spotlightEnabled = false;
         updateSpotlightScreen({
@@ -1672,6 +1814,7 @@
       ];
       const viewerStandaloneShortcuts = [
         ['Space', 'Pause or resume slide animations'],
+        ['Z', 'Toggle the liquid-glass magnifier'],
         ['T / V', 'Toggle table of contents / filmstrip'],
         ['L / S', 'Toggle laser / spotlight'],
         ['A / E', 'Toggle annotation / annotation eraser'],
@@ -1835,11 +1978,19 @@
           if (editable || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
           const key = event.key.toLowerCase();
           if (presenterIsOpen()) return;
-          if (![' ', 'a', 'b', 'e', 'l', 's'].includes(key)) return;
+          if (![' ', 'a', 'b', 'e', 'l', 's', 'z'].includes(key)) return;
           event.preventDefault();
           event.stopImmediatePropagation();
           if (key === ' ') {
             toggleAudienceAnimations();
+            return;
+          }
+          if (key === 'z') {
+            standaloneMagnifierEnabled = !standaloneMagnifierEnabled;
+            updateMagnifier({
+              ...standalonePointerPosition,
+              visible: standaloneMagnifierEnabled
+            });
             return;
           }
           if (key === 'b') {
@@ -2104,6 +2255,9 @@
         if (event.data?.type === 'laser') {
           updateLaserPointer(event.data);
         }
+        if (event.data?.type === 'magnifier') {
+          updateMagnifier(event.data);
+        }
         if (event.data?.type === 'annotation-cursor') updateAnnotationCursor(event.data);
         if (event.data?.type === 'chart-tooltip') updatePresenterChartTooltip(event.data);
         if (event.data?.type === 'blackout') updateBlackoutScreen(event.data.visible);
@@ -2175,6 +2329,9 @@
               lastReadyAudienceSlideIndex = -1;
             }
             scheduleUniformSlideScale();
+            if (latestMagnifierPointer.visible) {
+              requestAnimationFrame(() => updateMagnifier(latestMagnifierPointer));
+            }
             annotationPaths = annotationsBySlide.get(audienceSlideIndex) || [];
             activeAnnotationPath = undefined;
             renderAudienceAnnotations();

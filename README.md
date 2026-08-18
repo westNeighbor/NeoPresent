@@ -186,18 +186,17 @@ Press `H` or `?` in either window for theme-aware help. Viewer help changes auto
 | O                                | Cycle overview modes                      |
 | 0                                | Exit overview                             |
 | N / T / V / C                    | Notes / TOC / filmstrip / viewer controls |
+| Z                                | Toggle liquid-glass magnifier              |
 | P                                | Toggle audience PDF inspection            |
 | H or ?                           | Toggle shortcut help                      |
 
-The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), eraser (`E`), blank screen (`B`), search (`F`), and bookmarks (`M`). See [Presenting and controls](docs/presenting.md) for the complete context-sensitive tables and PDF inspection controls.
+The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), eraser (`E`), blank screen (`B`), search (`F`), bookmarks (`M`), and the liquid-glass magnifier (`Z`). See [Presenting and controls](docs/presenting.md) for the complete context-sensitive tables and PDF inspection controls.
 
 ## Release notes
 <details>
   <summary>v0.1.0</summary>
-
   <!-- Bulk Build part -->
   <div style="margin-left: 20px;margin-bottom: 10px;">
-    <br>
     <ul>
       <li>Simple markdown to write.</li>
       <li>Built-in plotting and fitting.</li>
@@ -233,9 +232,36 @@ The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), 
         <li>A lot more</li>
         </ul>
     </ul>
-    <br>
   </div>
 
+</details>
+
+<details>
+  <summary>v0.2.0</summary>
+  <!-- Bulk Build part -->
+  <div style="margin-left: 20px;margin-bottom: 10px;">
+    <ul>
+      <li> Support more plot types</li> 
+        <ul>
+        <li><b>polar function, cylindrical function, spherical function, 
+  parametric function, geographic, survival plot, QQ plot, probability plot, ECDF plot, 
+  precision-recall plot, volcano plot, waterfall plot, sanky plot, alluvial plot, 
+  time-series plot, contour plot, density 2d plot, stacked-bar plot, ternary plot, 
+  forest plot, corner plot, ROC plot, efficiency plot, ratio and pull plot, 
+  group bar plot,pie chart/donut plot</b></li>
+        </ul>
+      <li> Add magnify glass effect</li> 
+        <ul>
+        <li> <code>z</code> to turn on/off the effect</li>
+        </ul>
+      <li> Add more themes</li> 
+        <ul>
+        <li> <b>Alpine, Gallery, Blueprint, Aurora, Orchid, Chalkboard, Neon, Risograph, 
+        Botanical, Glass⋅Aurora, Glass⋅Citrus, Glass⋅Rose, Glass⋅Sunset, Glass⋅Arctic, 
+        Glass⋅Forest,Glass⋅Cosmic</b></li>
+        </ul>
+    </ul>
+  </div>
 </details>
 
 ## Workspace
@@ -252,7 +278,6 @@ The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), 
 
 ## Future plans
 
-- [ ] Add more math plot types 
 - [ ] Support more disciplines other than physics/math
 - [ ] Add UI live editting
 

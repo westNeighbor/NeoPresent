@@ -62,6 +62,16 @@ For examples and explanations, start with the [plotting guide](plotting.md). Thi
 | Scatter | \`scatter\` |
 | Area | \`area\` |
 | Bar | \`bar\` |
+| Pie / donut | \`pie\`, \`donut\`, \`doughnut\` |
+| Radar | \`radar\`, \`spider\`, \`spider-chart\` |
+| Ratio / pull | \`ratio\`, \`pull\`, \`ratio-panel\`, \`pull-panel\` |
+| Efficiency | \`efficiency\`, \`acceptance\` |
+| ROC | \`roc\`, \`roc-curve\` |
+| Polar | \`polar\`, \`radial\` |
+| Stacked bar | \`stacked-bar\`, \`normalized-stacked-bar\` |
+| Ternary | \`ternary\`, \`triangle\` |
+| Forest | \`forest\`, \`forest-plot\` |
+| Corner | \`corner\`, \`pair\`, \`pair-plot\` |
 | Histogram | \`histogram\`, \`hist\` |
 | Stacked histogram | \`stacked-histogram\`, \`stacked-hist\` |
 | Normalized histogram | \`normalized-histogram\`, \`normalized-hist\` |

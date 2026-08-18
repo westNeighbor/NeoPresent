@@ -11,7 +11,7 @@
 @footer-shadow-opacity 35%
 @footer-left {{style:font=Monaco;size=22px;offset=0px, -10px | M.H. Zhao · Iowa State University}}
 @footer-center {{style:size=24px;color=#8b1a1a;offset=0px, -10px | Forward Drell–Yan $A_N$ at STAR}}
-@footer-right {{style:size=22px;offset=-50px, -10px | Ph.D. Defense · 2026-08-11}}
+@footer-right {{style:size=22px;offset=-50px, -10px | Ph.D. Defense · {{today:iso}}}}
 @page-number on
 @page-total on
 @page-number-position bottom-right

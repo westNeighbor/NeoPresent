@@ -44,16 +44,16 @@
     };
   };
 
-  function finishDrawAnimation(surface) {
+  function finishEntranceAnimation(surface) {
     const group = surface.querySelector('[data-neopresent-surface-faces]');
-    if (
-      group?.dataset.surfaceAnimation !== 'draw' ||
-      group.dataset.surfaceAnimationSettled === 'true'
-    )
-      return;
+    if (!group || group.dataset.surfaceAnimationSettled === 'true') return;
+    group.style.animation = 'none';
+    group.style.opacity = '1';
+    group.style.transform = 'none';
     group.querySelectorAll('[data-neopresent-surface-vertices]').forEach((face) => {
       face.style.animation = 'none';
       face.style.opacity = '1';
+      face.style.transform = 'none';
     });
     group.dataset.surfaceAnimationSettled = 'true';
   }
@@ -111,7 +111,7 @@
   function applyInteraction(surface, camera) {
     // Face depth sorting moves polygons in the DOM. Complete a one-time draw
     // entrance only for a real camera interaction, not for slide restoration.
-    finishDrawAnimation(surface);
+    finishEntranceAnimation(surface);
     if (presenter) {
       redraw(surface, camera);
       publish(surface);
@@ -176,7 +176,10 @@
         ? presenterById.get(surfaceId)
         : (viewerById.get(surfaceId) ?? presenterById.get(surfaceId));
       const signature = camera ? `${camera.azimuth}:${camera.elevation}:${camera.zoom}` : '';
-      if (camera && surface.dataset.surfaceCameraSignature !== signature) redraw(surface, camera);
+      if (camera && surface.dataset.surfaceCameraSignature !== signature) {
+        finishEntranceAnimation(surface);
+        redraw(surface, camera);
+      }
     });
   }
 
@@ -186,7 +189,7 @@
     // A real presenter interaction deliberately takes control of the audience.
     viewerById.delete(event.data.surfaceId);
     document.querySelectorAll?.('[data-neopresent-surface]').forEach((surface) => {
-      if (surface.dataset.surfaceId === event.data.surfaceId) finishDrawAnimation(surface);
+      if (surface.dataset.surfaceId === event.data.surfaceId) finishEntranceAnimation(surface);
     });
     applyLatest();
   });

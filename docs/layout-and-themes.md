@@ -109,14 +109,47 @@ Override it on an individual slide:
 ```markdown
 ---
 
-@theme dark
+@theme midnight
 
-# Dark interlude
+# Midnight interlude
 ```
 
 Theme-aware viewer and presenter overlays—including shortcut help, key badges, filmstrip page badges, and popup panels—derive their surface, border, and text colors from the active slide.
 
-NeoPresent includes its default themes plus Powerdot-inspired Fyma and Ciment variants. Theme-specific palette controls remain deck directives:
+NeoPresent includes the following built-in themes:
+
+| Theme | Character |
+|---|---|
+| `default` | Dark, modern, and high contrast. |
+| `light` | Crisp neutral white for general presentations. |
+| `paper` | Warm off-white, suitable for papers and lectures. |
+| `midnight` | Deep indigo dark mode. |
+| `alpine` | Layered mountain-paper texture and a green left-rule heading. |
+| `gallery` | Framed editorial layout with ivory paper, bronze, and navy details. |
+| `blueprint` | Technical navy grid with a double cyan heading rule. |
+| `aurora` | Deep night sky, luminous color sweeps, and a glowing framed heading. |
+| `orchid` | Decorative concentric rings with a lavender double-rule heading. |
+| `chalkboard` | Textured dark board with chalk-like rules and warm highlights. |
+| `neon` | Dark night-sky gradients with cyan and magenta light. |
+| `risograph` | Warm print-paper texture with blue and coral ink. |
+| `botanical` | Soft paper with layered leaf-green and gold washes. |
+| `glass-aurora` | Frosted midnight glass over cyan and violet light. |
+| `glass-citrus` | Bright translucent glass over citrus, mint, and sky light. |
+| `glass-rose` | Frosted rose glass over pink, lavender, and peach light. |
+| `glass-sunset` | Warm frosted plum glass over coral, gold, and violet light. |
+| `glass-arctic` | Bright ice-glass panels over white, cyan, and sky-blue light. |
+| `glass-forest` | Deep translucent jade glass with soft green and gold light. |
+| `glass-cosmic` | Amethyst glass over violet, blue, and pink star-like light. |
+| `fyma`, `fyma-*` | Powerdot-inspired presentation palettes. |
+| `ciment` | White technical paper with a configurable hatch. |
+
+For example:
+
+```markdown
+@theme aurora
+```
+
+Fyma and Ciment retain their theme-specific palette controls:
 
 ```markdown
 @theme fyma

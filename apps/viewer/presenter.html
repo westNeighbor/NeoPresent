@@ -1280,6 +1280,22 @@
                 <option value="midnight">Midnight</option>
                 <option value="light">Light</option>
                 <option value="paper">Paper</option>
+                <option value="alpine">Alpine</option>
+                <option value="gallery">Gallery</option>
+                <option value="blueprint">Blueprint</option>
+                <option value="aurora">Aurora</option>
+                <option value="orchid">Orchid</option>
+                <option value="chalkboard">Chalkboard</option>
+                <option value="neon">Neon</option>
+                <option value="risograph">Risograph</option>
+                <option value="botanical">Botanical</option>
+                <option value="glass-aurora">Glass · Aurora</option>
+                <option value="glass-citrus">Glass · Citrus</option>
+                <option value="glass-rose">Glass · Rose</option>
+                <option value="glass-sunset">Glass · Sunset</option>
+                <option value="glass-arctic">Glass · Arctic</option>
+                <option value="glass-forest">Glass · Forest</option>
+                <option value="glass-cosmic">Glass · Cosmic</option>
                 <option value="fyma">Fyma</option>
                 <option value="fyma-green">Fyma · Green</option>
                 <option value="fyma-gray">Fyma · Gray</option>
@@ -1324,6 +1340,19 @@
           <button type="button" id="shortcuts-button">Shortcuts</button>
           <button type="button" id="audience-blank" aria-pressed="false">Blank audience</button>
           <button type="button" id="laser-toggle" aria-pressed="false">Laser</button>
+          <button type="button" id="magnifier-toggle" aria-pressed="false" title="Toggle the audience liquid-glass magnifier (Z)">Magnify</button>
+          <span class="control-group" id="magnifier-controls">
+            <label class="pointer-symbol" title="How much the lens enlarges the slide"
+              >Zoom
+              <input class="annotation-size" id="magnifier-zoom" type="range" min="1.2" max="3" step="0.1" value="1.7"
+            /></label>
+            <output id="magnifier-zoom-value">1.7×</output>
+            <label class="pointer-symbol" title="Diameter of the magnifying lens"
+              >Size
+              <input class="annotation-size" id="magnifier-size" type="range" min="160" max="420" step="10" value="260"
+            /></label>
+            <output id="magnifier-size-value">260 px</output>
+          </span>
           <span class="control-group" id="laser-controls">
             <label class="pointer-symbol" title="Optional pointer character, for example ✍"
               >Pointer <input id="laser-symbol" maxlength="8" placeholder="●"
@@ -1473,6 +1502,7 @@
           <kbd>M</kbd><span>Bookmark or unbookmark the current slide</span> <kbd>L</kbd
           ><span>Toggle laser</span> <kbd>S</kbd><span>Toggle spotlight</span> <kbd>A</kbd
           ><span>Toggle annotation</span> <kbd>E</kbd><span>Toggle annotation eraser</span>
+          <kbd>Z</kbd><span>Toggle audience magnifier</span>
           <kbd>N</kbd><span>Toggle audience notes</span> <kbd>O</kbd
           ><span>Cycle audience overview</span> <kbd>T</kbd><span>Toggle audience TOC</span>
           <kbd>V</kbd><span>Toggle audience filmstrip</span> <kbd>Enter</kbd
@@ -1576,6 +1606,7 @@
       let autoplayRunning = false;
       let autoplayDeadline = 0;
       let laserEnabled = false;
+      let magnifierEnabled = false;
       let spotlightEnabled = false;
       let spotlightRingEnabled = false;
       let latestPointerPosition = { x: 0.5, y: 0.5 };
@@ -1930,6 +1961,11 @@
           toggleBookmark(activeSlideIndex);
           return;
         }
+        if (event.key === 'z' || event.key === 'Z') {
+          event.preventDefault();
+          setMagnifierEnabled(!magnifierEnabled);
+          return;
+        }
         if (event.key === 'l' || event.key === 'L') {
           event.preventDefault();
           setLaserEnabled(!laserEnabled);
@@ -2001,6 +2037,12 @@
       });
 
       const laserToggle = document.querySelector('#laser-toggle');
+      const magnifierToggle = document.querySelector('#magnifier-toggle');
+      const magnifierControls = document.querySelector('#magnifier-controls');
+      const magnifierZoom = document.querySelector('#magnifier-zoom');
+      const magnifierZoomValue = document.querySelector('#magnifier-zoom-value');
+      const magnifierSize = document.querySelector('#magnifier-size');
+      const magnifierSizeValue = document.querySelector('#magnifier-size-value');
       const laserControls = document.querySelector('#laser-controls');
       const spotlightToggle = document.querySelector('#spotlight-toggle');
       const spotlightControls = document.querySelector('#spotlight-controls');
@@ -2488,9 +2530,22 @@
         spotlightRingChannel.postMessage(style);
         channel.postMessage({ type: 'spotlight-ring-style', ...style });
       };
+      const magnifierOptions = () => ({
+        magnifierSize: Number(magnifierSize.value),
+        magnifierZoom: Number(magnifierZoom.value)
+      });
+      const publishMagnifier = (visible = magnifierEnabled) => {
+        channel.postMessage({
+          type: 'magnifier',
+          ...latestPointerPosition,
+          ...magnifierOptions(),
+          visible
+        });
+      };
       const sendLaser = (visible, event) => {
         if (!event) {
           channel.postMessage({ type: 'laser', visible: false });
+          if (magnifierEnabled) publishMagnifier(false);
           if (spotlightEnabled) publishSpotlight({ visible: false });
           if (laserPointer) laserPointer.style.opacity = '0';
           return;
@@ -2512,6 +2567,9 @@
         }
         if (laserEnabled) {
           channel.postMessage({ ...pointer, type: 'laser' });
+        }
+        if (magnifierEnabled) {
+          channel.postMessage({ ...pointer, ...magnifierOptions(), type: 'magnifier' });
         }
         if (spotlightEnabled) publishSpotlight(pointer);
       };
@@ -2537,6 +2595,14 @@
           channel.postMessage({ type: 'laser', visible: false });
           if (laserPointer) laserPointer.style.opacity = '0';
         }
+      };
+      const setMagnifierEnabled = (enabled) => {
+        magnifierEnabled = enabled;
+        magnifierToggle.classList.toggle('is-active', enabled);
+        magnifierControls.classList.toggle('is-visible', enabled);
+        magnifierToggle.setAttribute('aria-pressed', String(enabled));
+        magnifierToggle.textContent = enabled ? 'Magnifying' : 'Magnify';
+        publishMagnifier(enabled);
       };
       const setSpotlightEnabled = (enabled) => {
         spotlightEnabled = enabled;
@@ -3020,6 +3086,16 @@
         });
       });
       laserToggle.addEventListener('click', () => setLaserEnabled(!laserEnabled));
+      magnifierToggle.addEventListener('click', () => setMagnifierEnabled(!magnifierEnabled));
+      const syncMagnifierControls = () => {
+        magnifierZoomValue.value = `${Number(magnifierZoom.value).toFixed(1)}×`;
+        magnifierZoomValue.textContent = magnifierZoomValue.value;
+        magnifierSizeValue.value = `${Math.round(Number(magnifierSize.value))} px`;
+        magnifierSizeValue.textContent = magnifierSizeValue.value;
+        if (magnifierEnabled) publishMagnifier(true);
+      };
+      magnifierZoom.addEventListener('input', syncMagnifierControls);
+      magnifierSize.addEventListener('input', syncMagnifierControls);
       spotlightToggle.addEventListener('click', () => setSpotlightEnabled(!spotlightEnabled));
       const publishSpotlightStyle = () => {
         publishRingStyle();

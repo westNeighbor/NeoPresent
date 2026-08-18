@@ -361,6 +361,108 @@ values: 12, 28
     expect((deck.children[0]!.children[0] as Chart).kind).toBe('area');
   });
 
+  it('compiles pie aliases and animation settings', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: donut
+title: Event composition
+labels: Signal, Background, Other
+values: 52, 33, 15
+pie-inner-radius: 45
+animation: draw
+animation-duration: 900ms
+\`\`\``);
+    const chart = deck.children[0]!.children[0] as Chart;
+
+    expect(chart.kind).toBe('pie');
+    expect(chart.labels).toEqual(['Signal', 'Background', 'Other']);
+    expect(chart.values).toEqual([52, 33, 15]);
+    expect(chart.getAttribute('plotStyle')).toMatchObject({
+      'pie-inner-radius': '45',
+      animation: 'draw',
+      'animation-duration': '900ms'
+    });
+  });
+
+  it('accepts shared category labels for a grouped bar chart backed by series', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: bar
+labels: 2022, 2023, 2024
+legend: true
+series: Cook | values: 42,58,71 | color: #ef4444 | legend: true
+series: DuPage | values: 31,37,44 | color: #3b82f6 | legend: true
+series: Lake | values: 22,29,35 | color: #22c55e | legend: true
+\`\`\``);
+    const chart = deck.children[0]!.children[0] as Chart;
+
+    expect(chart.kind).toBe('bar');
+    expect(chart.values).toEqual([]);
+    expect(chart.labels).toEqual(['2022', '2023', '2024']);
+    const series = chart.getAttribute<Array<{ labels: string[] }>>('series')!;
+    expect(series).toHaveLength(3);
+    expect(series.every((item) => item.labels.length === 0)).toBe(true);
+  });
+
+  it('compiles radar aliases and radar-specific settings', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: spider
+labels: Accuracy, Speed, Stability, Coverage
+radar-max: 100
+radar-grid-levels: 4
+series: Model A | values: 82,74,91,68 | color: #3b82f6
+series: Model B | values: 71,89,76,84 | color: #ef4444
+animation: draw
+\`\`\``);
+    const chart = deck.children[0]!.children[0] as Chart;
+
+    expect(chart.kind).toBe('radar');
+    expect(chart.labels).toEqual(['Accuracy', 'Speed', 'Stability', 'Coverage']);
+    expect(chart.getAttribute('plotStyle')).toMatchObject({
+      'radar-max': '100',
+      'radar-grid-levels': '4',
+      animation: 'draw'
+    });
+  });
+
+  it.each([
+    ['ratio-panel', 'ratio'],
+    ['efficiency', 'efficiency'],
+    ['roc-curve', 'roc'],
+    ['polar', 'polar'],
+    ['stacked-bar', 'stacked-bar'],
+    ['ternary', 'ternary'],
+    ['forest-plot', 'forest'],
+    ['corner', 'corner']
+  ] as const)('compiles the %s scientific plot family', (type, expected) => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: ${type}
+labels: A, B, C
+values: 1,2,3
+\`\`\``);
+    expect((deck.children[0]!.children[0] as Chart).kind).toBe(expected);
+  });
+
+  it('compiles inline x/y series for a ROC curve', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: roc
+series: Classifier A | x: 0,.05,.15,.35,1 | y: 0,.55,.78,.92,1 | color: #3b82f6
+series: Classifier B | x: 0,.08,.22,.45,1 | y: 0,.48,.71,.88,1 | color: #ef4444
+\`\`\``);
+    const chart = deck.children[0]!.children[0] as Chart;
+    const series =
+      chart.getAttribute<
+        Array<{ name: string; values: number[]; xValues: number[]; yField: string }>
+      >('series')!;
+
+    expect(chart.kind).toBe('roc');
+    expect(series).toHaveLength(2);
+    expect(series[0]).toMatchObject({
+      name: 'Classifier A',
+      values: [0, 0.55, 0.78, 0.92, 1],
+      xValues: [0, 0.05, 0.15, 0.35, 1],
+      yField: ''
+    });
+  });
+
   it('extracts horizontal and vertical slide alignment directives', () => {
     const deck = parseMarkdown(`@align left
 @valign bottom
@@ -1411,5 +1513,226 @@ surface-interactive: true
       'surface-zoom': '1.2',
       'surface-interactive': 'true'
     });
+  });
+
+  it('samples polar functions in radians and preserves polar coordinates', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: polar-function
+function: 2 + cos(3*theta)
+theta-min: 0
+theta-max: 2*pi
+theta-samples: 5
+\`\`\``);
+    const chart = deck.children[0]?.children[0] as Chart;
+
+    expect(chart.kind).toBe('polar-function');
+    expect(chart.xValues).toHaveLength(5);
+    expect(chart.values).toHaveLength(5);
+    expect(chart.xValues[0]).toBeCloseTo(3);
+    expect(chart.values[0]).toBeCloseTo(0);
+    const style = chart.getAttribute<Record<string, string>>('plotStyle');
+    expect(style?.['polar-theta-values']?.split(',').map(Number)).toEqual([
+      0,
+      Math.PI / 2,
+      Math.PI,
+      (3 * Math.PI) / 2,
+      2 * Math.PI
+    ]);
+    const radii = style?.['polar-radius-values']?.split(',').map(Number) ?? [];
+    expect(radii).toHaveLength(5);
+    expect(radii[0]).toBeCloseTo(3);
+    expect(radii[1]).toBeCloseTo(2);
+    expect(radii[2]).toBeCloseTo(1);
+  });
+
+  it.each([
+    {
+      coordinates: 'cylindrical',
+      fields: `surface-function: r\nr-min: 0\nr-max: 2\nr-samples: 3\ntheta-samples: 5`,
+      shape: { columns: 3, rows: 5 },
+      first: [0, 0, 0]
+    },
+    {
+      coordinates: 'spherical',
+      fields: `surface-function: 1\ntheta-samples: 5\nphi-samples: 3`,
+      shape: { columns: 5, rows: 3 },
+      first: [0, 0, 1]
+    },
+    {
+      coordinates: 'parametric',
+      fields: `x-function: (2 + cos(v))*cos(u)\ny-function: (2 + cos(v))*sin(u)\nz-function: sin(v)\nu-samples: 5\nv-samples: 5`,
+      shape: { columns: 5, rows: 5 },
+      first: [3, 0, 0]
+    }
+  ])(
+    'samples $coordinates surface functions as a structured grid',
+    ({ coordinates, fields, shape, first }) => {
+      const deck = parseMarkdown(`\`\`\`plot
+type: surface
+surface-coordinates: ${coordinates}
+${fields}
+\`\`\``);
+      const chart = deck.children[0]?.children[0] as Chart;
+
+      expect(chart.kind).toBe('surface');
+      expect(chart.getAttribute('surfaceCoordinateSystem')).toBe(coordinates);
+      expect(chart.getAttribute('surfaceGridShape')).toEqual(shape);
+      expect(chart.xValues).toHaveLength(shape.columns * shape.rows);
+      expect(chart.getAttribute<number[]>('heatmapYValues')).toHaveLength(
+        shape.columns * shape.rows
+      );
+      expect(chart.values).toHaveLength(shape.columns * shape.rows);
+      expect(chart.xValues[0]).toBeCloseTo(first[0] ?? 0);
+      expect(chart.getAttribute<number[]>('heatmapYValues')?.[0]).toBeCloseTo(first[1] ?? 0);
+      expect(chart.values[0]).toBeCloseTo(first[2] ?? 0);
+    }
+  );
+});
+
+describe('extended statistical and flow plot types', () => {
+  it.each([
+    ['qq', 'qq'],
+    ['probability-plot', 'qq'],
+    ['ecdf', 'ecdf'],
+    ['survival', 'ecdf'],
+    ['precision-recall', 'precision-recall'],
+    ['volcano', 'volcano'],
+    ['waterfall', 'waterfall'],
+    ['sankey', 'sankey'],
+    ['alluvial', 'sankey'],
+    ['time-series', 'time-series'],
+    ['geographic', 'geographic']
+  ] as const)('maps %s to %s', (type, expected) => {
+    const deck = parseMarkdown(`\`\`\`plot\ntype: ${type}\nvalues: 1,2\nlabels: A,B\n\`\`\``);
+    expect((deck.children[0]?.children[0] as Chart).kind).toBe(expected);
+  });
+
+  it('turns the survival alias into a complementary ECDF', () => {
+    const deck = parseMarkdown(`\`\`\`plot\ntype: survival\nvalues: 1,2,3\n\`\`\``);
+    expect(
+      (deck.children[0]?.children[0] as Chart).getAttribute<Record<string, string>>('plotStyle')
+    ).toMatchObject({ 'ecdf-complement': 'true' });
+  });
+
+  it('accepts scalar inline series values for Sankey links', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: sankey
+series: Generated -> Selected | values: 850
+\`\`\``);
+    const chart = deck.children[0]?.children[0] as Chart;
+    expect(chart.kind).toBe('sankey');
+    expect(chart.getAttribute<Array<Record<string, unknown>>>('series')).toEqual([
+      expect.objectContaining({ name: 'Generated -> Selected', values: [850] })
+    ]);
+  });
+
+  it('preserves structured external-data field names', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: sankey
+source: data/flow.csv
+sankey-source-field: from
+sankey-target-field: to
+sankey-value-field: events
+geo-region-field: region
+efficiency-total-field: total
+survival-event-field: observed
+time-missing: 2
+forest-lower-field: lower
+forest-upper-field: upper
+waterfall-total-field: kind
+survival-confidence: true
+survival-confidence-level: 95
+survival-confidence-color: #f59e0b
+survival-confidence-alpha: .2
+geo-name-field: title
+geo-value-field: rate
+geo-palette: kBird
+geo-color-label: Event rate
+geo-colorbar-x: 650
+geo-colorbar-y: 250
+geo-colorbar-width: 20
+geo-colorbar-height: 120
+legend-x: .2
+legend-y: .3
+\`\`\``);
+    expect(
+      (deck.children[0]?.children[0] as Chart).getAttribute<Record<string, string>>('plotStyle')
+    ).toMatchObject({
+      'sankey-source-field': 'from',
+      'sankey-target-field': 'to',
+      'sankey-value-field': 'events',
+      'geo-region-field': 'region',
+      'efficiency-total-field': 'total',
+      'survival-event-field': 'observed',
+      'time-missing': '2',
+      'forest-lower-field': 'lower',
+      'forest-upper-field': 'upper',
+      'waterfall-total-field': 'kind',
+      'survival-confidence': 'true',
+      'survival-confidence-level': '95',
+      'survival-confidence-color': '#f59e0b',
+      'survival-confidence-alpha': '.2',
+      'geo-name-field': 'title',
+      'geo-value-field': 'rate',
+      'geo-palette': 'kBird',
+      'geo-color-label': 'Event rate',
+      'geo-colorbar-x': '650',
+      'geo-colorbar-y': '250',
+      'geo-colorbar-width': '20',
+      'geo-colorbar-height': '120',
+      'legend-x': '.2',
+      'legend-y': '.3'
+    });
+  });
+
+  it('parses volcano label controls', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: volcano
+x: -2,0,2
+y: 3,.2,4
+labels: Down,Neutral,Up
+legend: true
+volcano-labels: true
+volcano-label-significant-only: false
+volcano-label-size: 13
+\`\`\``);
+    expect(
+      (deck.children[0]?.children[0] as Chart).getAttribute<Record<string, string>>('plotStyle')
+    ).toMatchObject({
+      legend: 'true',
+      'volcano-labels': 'true',
+      'volcano-label-significant-only': 'false',
+      'volcano-label-size': '13'
+    });
+  });
+});
+
+describe('ternary plot components', () => {
+  it('preserves all three documented component arrays', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: ternary
+labels: Sample 1, Sample 2, Sample 3
+x: 20,50,25
+y: 30,20,50
+values: 50,30,25
+\`\`\``);
+    const chart = deck.children[0]?.children[0] as Chart;
+    expect(chart.xValues).toEqual([20, 50, 25]);
+    expect(chart.getAttribute('heatmapYValues')).toEqual([30, 20, 50]);
+    expect(chart.values).toEqual([50, 30, 25]);
+  });
+
+  it('accepts a single ternary sample', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: ternary
+labels: Sample
+x: 2
+y: 3
+values: 5
+\`\`\``);
+    const chart = deck.children[0]?.children[0] as Chart;
+    expect(chart.xValues).toEqual([2]);
+    expect(chart.getAttribute('heatmapYValues')).toEqual([3]);
+    expect(chart.values).toEqual([5]);
   });
 });

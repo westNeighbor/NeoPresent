@@ -942,15 +942,16 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
           'listFont',
           'quoteFont'
         ].flatMap((name) =>
-          groupSlide.getAttribute(name) === undefined
-            ? []
-            : [[name, groupSlide.getAttribute(name)]]
+          groupSlide.getAttribute(name) === undefined ? [] : [[name, groupSlide.getAttribute(name)]]
         )
       );
       pushBlock(
         Columns.create({
           attributes: { layout: 'group', ...groupStyleAttributes },
-          columns: [Column.create({ children: groupSlide.children }), Column.create({ children: [] })]
+          columns: [
+            Column.create({ children: groupSlide.children }),
+            Column.create({ children: [] })
+          ]
         })
       );
       continue;
@@ -963,11 +964,7 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean);
-      if (
-        columnWidths.some(
-          (value) => !/^(?:auto|\d+(?:\.\d+)?(?:%|fr|px|rem|em)?)$/i.test(value)
-        )
-      )
+      if (columnWidths.some((value) => !/^(?:auto|\d+(?:\.\d+)?(?:%|fr|px|rem|em)?)$/i.test(value)))
         throw new TypeError(
           'Column widths must use ratios, percentages, fr, px, rem, em, or auto.'
         );
@@ -1029,9 +1026,7 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
                   'listFont',
                   'quoteFont'
                 ].flatMap((name) =>
-                  column.getAttribute(name) === undefined
-                    ? []
-                    : [[name, column.getAttribute(name)]]
+                  column.getAttribute(name) === undefined ? [] : [[name, column.getAttribute(name)]]
                 )
               ),
               children: column.children
@@ -1207,19 +1202,19 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
                       ? 'bodyFont'
                       : name === 'body-align'
                         ? 'bodyAlign'
-                      : name === 'heading-font'
-                        ? 'headingFont'
-                        : name === 'heading-position'
-                          ? 'headingPosition'
-                          : name === 'heading-align'
-                            ? 'headingAlign'
-                            : name === 'heading-offset'
-                              ? 'headingOffset'
-                              : name === 'list-font'
-                                ? 'listFont'
-                                : name === 'quote-font'
-                                  ? 'quoteFont'
-                                  : name;
+                        : name === 'heading-font'
+                          ? 'headingFont'
+                          : name === 'heading-position'
+                            ? 'headingPosition'
+                            : name === 'heading-align'
+                              ? 'headingAlign'
+                              : name === 'heading-offset'
+                                ? 'headingOffset'
+                                : name === 'list-font'
+                                  ? 'listFont'
+                                  : name === 'quote-font'
+                                    ? 'quoteFont'
+                                    : name;
       if (name === 'align' && !['left', 'center', 'right'].includes(value.toLowerCase())) {
         throw new TypeError('@align must be left, center, or right.');
       }
@@ -1310,8 +1305,9 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
   const hasStagedReveal = (node: SlideChild): boolean => {
     if (
       node instanceof Chart &&
-      String((node.getAttribute<Record<string, unknown>>('plotStyle') ?? {})['animation-trigger'])
-        .toLowerCase() === 'reveal'
+      String(
+        (node.getAttribute<Record<string, unknown>>('plotStyle') ?? {})['animation-trigger']
+      ).toLowerCase() === 'reveal'
     )
       return true;
     if (
@@ -1538,8 +1534,76 @@ function createChart(source: string): Chart {
     'density-bandwidth',
     'density-grid-size',
     'density-palette',
+    'ecdf-complement',
+    'ecdf-points',
+    'ecdf-point-size',
+    'survival-events',
+    'survival-event-field',
+    'survival-confidence',
+    'survival-confidence-level',
+    'survival-confidence-color',
+    'survival-confidence-alpha',
+    'volcano-fold-threshold',
+    'volcano-significance-threshold',
+    'volcano-labels',
+    'volcano-label-significant-only',
+    'volcano-label-size',
+    'waterfall-total',
+    'waterfall-total-field',
+    'waterfall-total-indices',
+    'sankey-node-width',
+    'sankey-node-gap',
+    'sankey-source-field',
+    'sankey-target-field',
+    'sankey-value-field',
+    'time-window',
+    'time-missing',
+    'geo-projection',
+    'geo-show-grid',
+    'geo-region-field',
+    'geo-name-field',
+    'geo-value-field',
+    'geo-palette',
+    'geo-color-label',
+    'geo-colorbar-x',
+    'geo-colorbar-y',
+    'geo-colorbar-width',
+    'geo-colorbar-height',
     'profile-error',
     'profile-min-count',
+    'corner-bins',
+    'corner-label-size',
+    'efficiency-confidence',
+    'efficiency-total',
+    'efficiency-total-field',
+    'forest-line-color',
+    'forest-zero',
+    'forest-lower-field',
+    'forest-upper-field',
+    'polar-grid-levels',
+    'polar-grid-color',
+    'polar-label-color',
+    'polar-label-size',
+    'polar-max',
+    'polar-start-angle',
+    'ratio-denominator',
+    'ratio-mode',
+    'ratio-reference',
+    'stack-bar-gap',
+    'stack-bar-normalized',
+    'ternary-a-label',
+    'ternary-b-label',
+    'ternary-c-label',
+    'ternary-grid-levels',
+    'pie-colors',
+    'pie-inner-radius',
+    'pie-label-color',
+    'pie-label-position',
+    'pie-label-size',
+    'pie-labels',
+    'pie-start-angle',
+    'pie-stroke-color',
+    'pie-stroke-width',
     'diagram-background',
     'diagram-border-color',
     'diagram-label-color',
@@ -1582,6 +1646,15 @@ function createChart(source: string): Chart {
     'quiver-scale',
     'quiver-color',
     'quiver-width',
+    'radar-fill-alpha',
+    'radar-grid-color',
+    'radar-grid-levels',
+    'radar-label-color',
+    'radar-label-size',
+    'radar-max',
+    'radar-min',
+    'radar-point-size',
+    'radar-stroke-width',
     'streamline-color',
     'streamline-width',
     'streamline-step',
@@ -1642,12 +1715,33 @@ function createChart(source: string): Chart {
     'surface-palette-blue',
     'surface-palette-alpha',
     'surface-function',
+    'coordinates',
+    'surface-coordinates',
+    'theta-min',
+    'theta-max',
+    'theta-samples',
+    'phi-min',
+    'phi-max',
+    'phi-samples',
+    'r-min',
+    'r-max',
+    'r-samples',
+    'u-min',
+    'u-max',
+    'u-samples',
+    'v-min',
+    'v-max',
+    'v-samples',
+    'x-function',
+    'y-function',
+    'z-function',
     'surface-samples',
     'surface-x-samples',
     'surface-y-samples',
     'surface-mesh-color',
     'surface-mesh-width',
     'surface-alpha',
+    'surface-background',
     'surface-z-label',
     'surface-azimuth',
     'surface-elevation',
@@ -1711,6 +1805,8 @@ function createChart(source: string): Chart {
     'band-line',
     'legend',
     'legend-position',
+    'legend-x',
+    'legend-y',
     'legend-offset-x',
     'legend-offset-y',
     'legend-columns',
@@ -1924,64 +2020,176 @@ function createChart(source: string): Chart {
   const kind =
     values.type?.toLowerCase() === 'bar'
       ? 'bar'
-      : values.type?.toLowerCase() === 'area'
-        ? 'area'
-        : ['histogram', 'hist'].includes(values.type?.toLowerCase() ?? '')
-          ? 'histogram'
-          : ['box', 'boxplot'].includes(values.type?.toLowerCase() ?? '')
-            ? 'boxplot'
-            : values.type?.toLowerCase() === 'scatter'
-              ? 'scatter'
-              : values.type?.toLowerCase() === 'heatmap'
-                ? 'heatmap'
-                : values.type?.toLowerCase() === 'contour'
-                  ? 'contour'
-                  : ['covariance', 'error-ellipse', 'ellipse'].includes(
-                        values.type?.toLowerCase() ?? ''
-                      )
-                    ? 'covariance'
-                    : ['density2d', 'density-2d', 'kde2d'].includes(
-                          values.type?.toLowerCase() ?? ''
-                        )
-                      ? 'density2d'
-                      : values.type?.toLowerCase() === 'hexbin'
-                        ? 'hexbin'
-                        : ['quiver', 'vector'].includes(values.type?.toLowerCase() ?? '')
-                          ? 'quiver'
-                          : ['streamline', 'streamlines'].includes(values.type?.toLowerCase() ?? '')
-                            ? 'streamline'
-                            : ['profile', 'profile-histogram'].includes(
-                                  values.type?.toLowerCase() ?? ''
-                                )
-                              ? 'profile'
-                              : ['periodic-table', 'periodic'].includes(
-                                    values.type?.toLowerCase() ?? ''
-                                  )
-                                ? 'periodic-table'
-                                : ['standard-model', 'particle-model'].includes(
+      : ['qq', 'qq-plot', 'probability', 'probability-plot'].includes(
+            values.type?.toLowerCase() ?? ''
+          )
+        ? 'qq'
+        : ['ecdf', 'cdf', 'survival', 'survival-curve'].includes(values.type?.toLowerCase() ?? '')
+          ? 'ecdf'
+          : ['precision-recall', 'pr', 'pr-curve'].includes(values.type?.toLowerCase() ?? '')
+            ? 'precision-recall'
+            : values.type?.toLowerCase() === 'volcano'
+              ? 'volcano'
+              : values.type?.toLowerCase() === 'waterfall'
+                ? 'waterfall'
+                : ['sankey', 'alluvial'].includes(values.type?.toLowerCase() ?? '')
+                  ? 'sankey'
+                  : ['time-series', 'timeseries'].includes(values.type?.toLowerCase() ?? '')
+                    ? 'time-series'
+                    : ['geographic', 'geo', 'map'].includes(values.type?.toLowerCase() ?? '')
+                      ? 'geographic'
+                      : ['stacked-bar', 'normalized-stacked-bar'].includes(
+                            values.type?.toLowerCase() ?? ''
+                          )
+                        ? 'stacked-bar'
+                        : ['ratio', 'pull', 'ratio-panel', 'pull-panel'].includes(
+                              values.type?.toLowerCase() ?? ''
+                            )
+                          ? 'ratio'
+                          : ['efficiency', 'acceptance'].includes(values.type?.toLowerCase() ?? '')
+                            ? 'efficiency'
+                            : ['roc', 'roc-curve'].includes(values.type?.toLowerCase() ?? '')
+                              ? 'roc'
+                              : ['polar', 'radial'].includes(values.type?.toLowerCase() ?? '')
+                                ? 'polar'
+                                : ['polar-function', 'polar-curve'].includes(
                                       values.type?.toLowerCase() ?? ''
                                     )
-                                  ? 'standard-model'
-                                  : ['ridgeline', 'ridge'].includes(
+                                  ? 'polar-function'
+                                  : ['ternary', 'triangle'].includes(
                                         values.type?.toLowerCase() ?? ''
                                       )
-                                    ? 'ridgeline'
-                                    : [
-                                          'stacked-histogram',
-                                          'stacked-hist',
-                                          'normalized-histogram',
-                                          'normalized-hist'
-                                        ].includes(values.type?.toLowerCase() ?? '')
-                                      ? 'stacked-histogram'
-                                      : values.type?.toLowerCase() === 'violin'
-                                        ? 'violin'
-                                        : ['surface', 'surface3d'].includes(
+                                    ? 'ternary'
+                                    : ['forest', 'forest-plot'].includes(
+                                          values.type?.toLowerCase() ?? ''
+                                        )
+                                      ? 'forest'
+                                      : ['corner', 'pair', 'pair-plot'].includes(
+                                            values.type?.toLowerCase() ?? ''
+                                          )
+                                        ? 'corner'
+                                        : ['pie', 'donut', 'doughnut'].includes(
                                               values.type?.toLowerCase() ?? ''
                                             )
-                                          ? 'surface'
-                                          : values.type?.toLowerCase() === 'correlation'
-                                            ? 'heatmap'
-                                            : 'line';
+                                          ? 'pie'
+                                          : values.type?.toLowerCase() === 'area'
+                                            ? 'area'
+                                            : ['histogram', 'hist'].includes(
+                                                  values.type?.toLowerCase() ?? ''
+                                                )
+                                              ? 'histogram'
+                                              : ['box', 'boxplot'].includes(
+                                                    values.type?.toLowerCase() ?? ''
+                                                  )
+                                                ? 'boxplot'
+                                                : values.type?.toLowerCase() === 'scatter'
+                                                  ? 'scatter'
+                                                  : values.type?.toLowerCase() === 'heatmap'
+                                                    ? 'heatmap'
+                                                    : values.type?.toLowerCase() === 'contour'
+                                                      ? 'contour'
+                                                      : [
+                                                            'covariance',
+                                                            'error-ellipse',
+                                                            'ellipse'
+                                                          ].includes(
+                                                            values.type?.toLowerCase() ?? ''
+                                                          )
+                                                        ? 'covariance'
+                                                        : [
+                                                              'density2d',
+                                                              'density-2d',
+                                                              'kde2d'
+                                                            ].includes(
+                                                              values.type?.toLowerCase() ?? ''
+                                                            )
+                                                          ? 'density2d'
+                                                          : values.type?.toLowerCase() === 'hexbin'
+                                                            ? 'hexbin'
+                                                            : ['quiver', 'vector'].includes(
+                                                                  values.type?.toLowerCase() ?? ''
+                                                                )
+                                                              ? 'quiver'
+                                                              : [
+                                                                    'radar',
+                                                                    'spider',
+                                                                    'spider-chart'
+                                                                  ].includes(
+                                                                    values.type?.toLowerCase() ?? ''
+                                                                  )
+                                                                ? 'radar'
+                                                                : [
+                                                                      'streamline',
+                                                                      'streamlines'
+                                                                    ].includes(
+                                                                      values.type?.toLowerCase() ??
+                                                                        ''
+                                                                    )
+                                                                  ? 'streamline'
+                                                                  : [
+                                                                        'profile',
+                                                                        'profile-histogram'
+                                                                      ].includes(
+                                                                        values.type?.toLowerCase() ??
+                                                                          ''
+                                                                      )
+                                                                    ? 'profile'
+                                                                    : [
+                                                                          'periodic-table',
+                                                                          'periodic'
+                                                                        ].includes(
+                                                                          values.type?.toLowerCase() ??
+                                                                            ''
+                                                                        )
+                                                                      ? 'periodic-table'
+                                                                      : [
+                                                                            'standard-model',
+                                                                            'particle-model'
+                                                                          ].includes(
+                                                                            values.type?.toLowerCase() ??
+                                                                              ''
+                                                                          )
+                                                                        ? 'standard-model'
+                                                                        : [
+                                                                              'ridgeline',
+                                                                              'ridge'
+                                                                            ].includes(
+                                                                              values.type?.toLowerCase() ??
+                                                                                ''
+                                                                            )
+                                                                          ? 'ridgeline'
+                                                                          : [
+                                                                                'stacked-histogram',
+                                                                                'stacked-hist',
+                                                                                'normalized-histogram',
+                                                                                'normalized-hist'
+                                                                              ].includes(
+                                                                                values.type?.toLowerCase() ??
+                                                                                  ''
+                                                                              )
+                                                                            ? 'stacked-histogram'
+                                                                            : values.type?.toLowerCase() ===
+                                                                                'violin'
+                                                                              ? 'violin'
+                                                                              : [
+                                                                                    'surface',
+                                                                                    'surface3d'
+                                                                                  ].includes(
+                                                                                    values.type?.toLowerCase() ??
+                                                                                      ''
+                                                                                  )
+                                                                                ? 'surface'
+                                                                                : values.type?.toLowerCase() ===
+                                                                                    'correlation'
+                                                                                  ? 'heatmap'
+                                                                                  : 'line';
+
+  if (kind === 'ternary') {
+    if (!xValues && values.x?.trim() && Number.isFinite(Number(values.x.trim())))
+      xValues = [Number(values.x.trim())];
+    if (!yValues && values.y?.trim() && Number.isFinite(Number(values.y.trim())))
+      yValues = [Number(values.y.trim())];
+  }
 
   if (!['heatmap', 'contour', 'surface'].includes(kind) && numbers.length === 0 && yValues) {
     numbers = yValues;
@@ -1990,18 +2198,42 @@ function createChart(source: string): Chart {
   if (['normalized-histogram', 'normalized-hist'].includes(values.type?.toLowerCase() ?? '')) {
     plotStyle['stack-normalized'] = 'true';
   }
+  if (values.type?.toLowerCase() === 'normalized-stacked-bar') {
+    plotStyle['stack-bar-normalized'] = 'true';
+  }
+  if (['pull', 'pull-panel'].includes(values.type?.toLowerCase() ?? '')) {
+    plotStyle['ratio-mode'] = 'pull';
+  }
+  if (['survival', 'survival-curve'].includes(values.type?.toLowerCase() ?? '')) {
+    plotStyle['ecdf-complement'] = 'true';
+  }
 
   const surfaceExpression =
     values['surface-function'] ??
     functionDefinitions[0]?.expression ??
+    values['z-function'] ??
     values.formula ??
     values.expression;
   const hasPrimaryData = numbers.length > 0 || Boolean(values.source) || series.length > 0;
+  let surfaceGridMetadata:
+    | {
+        surfaceGridShape: { columns: number; rows: number };
+        surfaceParameterUValues: number[];
+        surfaceParameterVValues: number[];
+        surfaceCoordinateSystem: string;
+      }
+    | undefined;
   if (kind === 'surface' && surfaceExpression && !hasPrimaryData) {
     const grid = createSurfaceFunctionGrid(surfaceExpression, values);
     xValues = grid.xValues;
     yValues = grid.yValues;
     numbers = grid.values;
+    surfaceGridMetadata = {
+      surfaceGridShape: { columns: grid.columns, rows: grid.rows },
+      surfaceParameterUValues: grid.uValues,
+      surfaceParameterVValues: grid.vValues,
+      surfaceCoordinateSystem: grid.coordinateSystem
+    };
     plotStyle['surface-function'] = surfaceExpression;
   }
   const functionPlot = ['function', 'function2d', 'curve'].includes(
@@ -2012,6 +2244,14 @@ function createChart(source: string): Chart {
     xValues = sampled.xValues;
     numbers = sampled.values;
     plotStyle.function = surfaceExpression;
+  }
+  if (kind === 'polar-function' && surfaceExpression && !values.source) {
+    const sampled = createPolarFunctionSamples(surfaceExpression, values);
+    xValues = sampled.xValues;
+    numbers = sampled.values;
+    plotStyle.function = surfaceExpression;
+    plotStyle['polar-theta-values'] = sampled.thetaValues.join(',');
+    plotStyle['polar-radius-values'] = sampled.radiusValues.join(',');
   }
   const overlayDefinitions = hasPrimaryData ? functionDefinitions : functionDefinitions.slice(1);
   const functionOverlays = overlayDefinitions.map(({ expression, fields }, index) => {
@@ -2090,6 +2330,7 @@ function createChart(source: string): Chart {
     xErrorValues ||
     xErrorLowValues ||
     xErrorHighValues ||
+    (kind === 'ternary' && yValues) ||
     values['error-low'] ||
     values['error-high'] ||
     values['x-error'] ||
@@ -2144,12 +2385,11 @@ function createChart(source: string): Chart {
               ? { covarianceCorrelation: parseNumberList(values.rho ?? values.correlation) ?? [] }
               : {}),
             ...(functionOverlays.length > 0 ? { functionOverlays } : {}),
+            ...(surfaceGridMetadata ?? {}),
             ...(fitDefinitions.length > 0 ? { fitDefinitions } : {}),
             ...(diagramHighlights.length > 0 ? { diagramHighlights } : {}),
             ...(diagramReveals.length > 0 ? { diagramReveals } : {}),
-            ...(['heatmap', 'correlation', 'contour', 'surface', 'surface3d'].includes(
-              values.type?.toLowerCase() ?? ''
-            ) && yValues
+            ...(['heatmap', 'contour', 'surface', 'ternary'].includes(kind) && yValues
               ? { heatmapYValues: yValues }
               : {})
           }
@@ -2266,53 +2506,164 @@ function compileFunction(expression: string): ((x: number) => number) | null {
   return compiled ? (x) => Number(compiled(x)) : null;
 }
 
+function createPolarFunctionSamples(
+  expression: string,
+  options: Record<string, string>
+): { thetaValues: number[]; radiusValues: number[]; xValues: number[]; values: number[] } {
+  const compiled = compileMathExpression(expression, ['theta', 't']);
+  if (!compiled) throw new TypeError(`Invalid polar function expression: ${expression}`);
+  const minimum = readExpressionNumber(options['theta-min'], 0);
+  const requestedMaximum = readExpressionNumber(options['theta-max'], Math.PI * 2);
+  const maximum = requestedMaximum > minimum ? requestedMaximum : Math.PI * 2;
+  const requestedSamples = Number(
+    options['theta-samples'] ?? options['function-samples'] ?? options.samples
+  );
+  const sampleCount = Number.isFinite(requestedSamples)
+    ? Math.max(3, Math.min(4000, Math.trunc(requestedSamples)))
+    : 360;
+  const thetaValues = Array.from(
+    { length: sampleCount },
+    (_, index) => minimum + ((maximum - minimum) * index) / (sampleCount - 1)
+  );
+  const radiusValues = thetaValues.map((theta) => Number(compiled(theta, theta)));
+  const invalidIndex = radiusValues.findIndex((value) => !Number.isFinite(value));
+  if (invalidIndex >= 0)
+    throw new TypeError(
+      `Polar function returned a non-finite radius at theta=${thetaValues[invalidIndex]}.`
+    );
+  return {
+    thetaValues,
+    radiusValues,
+    xValues: thetaValues.map((theta, index) => radiusValues[index]! * Math.cos(theta)),
+    values: thetaValues.map((theta, index) => radiusValues[index]! * Math.sin(theta))
+  };
+}
+
+function readExpressionNumber(value: string | undefined, fallback: number): number {
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+  const compiled = compileMathExpression(text, []);
+  const result = compiled?.();
+  return Number.isFinite(result) ? Number(result) : fallback;
+}
+
 function createSurfaceFunctionGrid(
   expression: string,
   options: Record<string, string>
-): { xValues: number[]; yValues: number[]; values: number[] } {
-  const evaluate = compileSurfaceFunction(expression);
-  if (!evaluate) throw new TypeError(`Invalid surface function: ${expression}`);
+): {
+  xValues: number[];
+  yValues: number[];
+  values: number[];
+  columns: number;
+  rows: number;
+  uValues: number[];
+  vValues: number[];
+  coordinateSystem: string;
+} {
+  const coordinateSystem = String(
+    options['surface-coordinates'] ?? options.coordinates ?? 'cartesian'
+  )
+    .trim()
+    .toLowerCase();
+  const supported = ['cartesian', 'cylindrical', 'spherical', 'parametric'];
+  if (!supported.includes(coordinateSystem))
+    throw new TypeError(`Unsupported surface coordinate system: ${coordinateSystem}`);
   const range = (
     minimumKey: string,
     maximumKey: string,
     fallbackMinimum: number,
     fallbackMaximum: number
   ): [number, number] => {
-    const minimum = Number(options[minimumKey]);
-    const maximum = Number(options[maximumKey]);
-    return Number.isFinite(minimum) && Number.isFinite(maximum) && maximum > minimum
-      ? [minimum, maximum]
-      : [fallbackMinimum, fallbackMaximum];
+    const minimum = readExpressionNumber(options[minimumKey], fallbackMinimum);
+    const maximum = readExpressionNumber(options[maximumKey], fallbackMaximum);
+    return maximum > minimum ? [minimum, maximum] : [fallbackMinimum, fallbackMaximum];
   };
   const samples = (key: string) => {
     const requested = Number(options[key] ?? options['surface-samples'] ?? options.samples);
     return Number.isFinite(requested) ? Math.max(2, Math.min(100, Math.trunc(requested))) : 25;
   };
-  const [xMinimum, xMaximum] = range('x-min', 'x-max', -5, 5);
-  const [yMinimum, yMaximum] = range('y-min', 'y-max', -5, 5);
-  const xSamples = samples('surface-x-samples');
-  const ySamples = samples('surface-y-samples');
+  const ranges =
+    coordinateSystem === 'cylindrical'
+      ? [range('r-min', 'r-max', 0, 5), range('theta-min', 'theta-max', 0, Math.PI * 2)]
+      : coordinateSystem === 'spherical'
+        ? [range('theta-min', 'theta-max', 0, Math.PI * 2), range('phi-min', 'phi-max', 0, Math.PI)]
+        : coordinateSystem === 'parametric'
+          ? [range('u-min', 'u-max', 0, Math.PI * 2), range('v-min', 'v-max', 0, Math.PI * 2)]
+          : [range('x-min', 'x-max', -5, 5), range('y-min', 'y-max', -5, 5)];
+  const sampleKeys =
+    coordinateSystem === 'cylindrical'
+      ? ['r-samples', 'theta-samples']
+      : coordinateSystem === 'spherical'
+        ? ['theta-samples', 'phi-samples']
+        : coordinateSystem === 'parametric'
+          ? ['u-samples', 'v-samples']
+          : ['surface-x-samples', 'surface-y-samples'];
+  const xSamples = samples(sampleKeys[0]!);
+  const ySamples = samples(sampleKeys[1]!);
+  const scalarVariables =
+    coordinateSystem === 'cylindrical'
+      ? ['r', 'theta']
+      : coordinateSystem === 'spherical'
+        ? ['theta', 'phi']
+        : coordinateSystem === 'parametric'
+          ? ['u', 'v']
+          : ['x', 'y'];
+  const scalar = compileMathExpression(expression, scalarVariables);
+  const xFunction =
+    coordinateSystem === 'parametric'
+      ? compileMathExpression(String(options['x-function'] ?? ''), ['u', 'v'])
+      : null;
+  const yFunction =
+    coordinateSystem === 'parametric'
+      ? compileMathExpression(String(options['y-function'] ?? ''), ['u', 'v'])
+      : null;
+  if (!scalar || (coordinateSystem === 'parametric' && (!xFunction || !yFunction)))
+    throw new TypeError(`Invalid ${coordinateSystem} surface function definition.`);
   const xValues: number[] = [];
   const yValues: number[] = [];
   const generatedValues: number[] = [];
+  const uValues: number[] = [];
+  const vValues: number[] = [];
   for (let row = 0; row < ySamples; row += 1) {
-    const y = yMinimum + ((yMaximum - yMinimum) * row) / (ySamples - 1);
+    const v = ranges[1]![0] + ((ranges[1]![1] - ranges[1]![0]) * row) / (ySamples - 1);
     for (let column = 0; column < xSamples; column += 1) {
-      const x = xMinimum + ((xMaximum - xMinimum) * column) / (xSamples - 1);
-      const value = evaluate(x, y);
-      if (!Number.isFinite(value))
-        throw new TypeError(`Surface function returned a non-finite value at x=${x}, y=${y}.`);
+      const u = ranges[0]![0] + ((ranges[0]![1] - ranges[0]![0]) * column) / (xSamples - 1);
+      const scalarValue = Number(scalar(u, v));
+      let x = u;
+      let y = v;
+      let z = scalarValue;
+      if (coordinateSystem === 'cylindrical') {
+        x = u * Math.cos(v);
+        y = u * Math.sin(v);
+      } else if (coordinateSystem === 'spherical') {
+        x = scalarValue * Math.sin(v) * Math.cos(u);
+        y = scalarValue * Math.sin(v) * Math.sin(u);
+        z = scalarValue * Math.cos(v);
+      } else if (coordinateSystem === 'parametric') {
+        x = Number(xFunction!(u, v));
+        y = Number(yFunction!(u, v));
+      }
+      if (![x, y, z].every(Number.isFinite))
+        throw new TypeError(
+          `${coordinateSystem} surface returned a non-finite coordinate at ${scalarVariables[0]}=${u}, ${scalarVariables[1]}=${v}.`
+        );
       xValues.push(x);
       yValues.push(y);
-      generatedValues.push(value);
+      generatedValues.push(z);
+      uValues.push(u);
+      vValues.push(v);
     }
   }
-  return { xValues, yValues, values: generatedValues };
-}
-
-function compileSurfaceFunction(expression: string): ((x: number, y: number) => number) | null {
-  const compiled = compileMathExpression(expression, ['x', 'y']);
-  return compiled ? (x, y) => Number(compiled(x, y)) : null;
+  return {
+    xValues,
+    yValues,
+    values: generatedValues,
+    columns: xSamples,
+    rows: ySamples,
+    uValues,
+    vValues,
+    coordinateSystem
+  };
 }
 
 function compileMathExpression(
@@ -2550,7 +2901,10 @@ function parseChartSeries(source: string): Array<Record<string, unknown>> {
   }
 
   return entries.flatMap(({ fields, index, name }) => {
-    const values = parseNumberList(fields.values);
+    const scalarValue = fields.values?.trim();
+    const values =
+      parseNumberList(fields.values ?? fields.y) ??
+      (scalarValue && Number.isFinite(Number(scalarValue)) ? [Number(scalarValue)] : undefined);
     const xValues = parseNumberList(fields.x);
     const errors = parseNumberList(fields.error);
     const errorLow = parseNumberList(fields['error-low']);
@@ -2568,7 +2922,7 @@ function parseChartSeries(source: string): Array<Record<string, unknown>> {
         name: name || `Series ${index + 1}`,
         source: fields.source ?? '',
         xField: values && !xValues ? '' : (fields.x ?? ''),
-        yField: fields.y ?? '',
+        yField: values ? '' : (fields.y ?? ''),
         errorField: errors ? '' : (fields.error ?? ''),
         errorLowField: errorLow ? '' : (fields['error-low'] ?? ''),
         errorHighField: errorHigh ? '' : (fields['error-high'] ?? ''),
@@ -2615,7 +2969,10 @@ function parseChartSeries(source: string): Array<Record<string, unknown>> {
         fitAnimationDelay: fields['fit-animation-delay'] ?? '',
         fitAnimationDuration: fields['fit-animation-duration'] ?? '',
         fitAnimationEasing: fields['fit-animation-easing'] ?? '',
-        labels: labels ?? (values ? values.map((_, index) => String(index + 1)) : []),
+        // Keep omitted series labels empty so the renderer can inherit the
+        // chart-level category labels. Ordinal labels remain the final
+        // fallback when neither scope defines them.
+        labels: labels ?? [],
         values: values ?? [],
         xValues: xValues ?? [],
         errorValues: errors ?? [],

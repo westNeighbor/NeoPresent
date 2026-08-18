@@ -6,30 +6,48 @@ For examples and explanations, start with the [plotting guide](plotting.md). Thi
 
 ## Plot types and aliases
 
-| Canonical type       | Accepted `type` values                            |
-| -------------------- | ------------------------------------------------- |
-| Line                 | `line` (also the fallback when a type is unknown) |
-| Scatter              | `scatter`                                         |
-| Area                 | `area`                                            |
-| Bar                  | `bar`                                             |
-| Histogram            | `histogram`, `hist`                               |
-| Stacked histogram    | `stacked-histogram`, `stacked-hist`               |
-| Normalized histogram | `normalized-histogram`, `normalized-hist`         |
-| Box plot             | `box`, `boxplot`                                  |
-| Heatmap              | `heatmap`, `correlation`                          |
-| Contour              | `contour`                                         |
-| Covariance ellipse   | `covariance`, `error-ellipse`, `ellipse`          |
-| 2D density           | `density2d`, `density-2d`, `kde2d`                |
-| Hexbin               | `hexbin`                                          |
-| Quiver               | `quiver`, `vector`                                |
-| Streamline           | `streamline`, `streamlines`                       |
-| Profile histogram    | `profile`, `profile-histogram`                    |
-| Ridgeline            | `ridgeline`, `ridge`                              |
-| Violin               | `violin`                                          |
-| Surface              | `surface`, `surface3d`                            |
-| Function             | `function`, `function2d`, `curve`                 |
-| Standard Model       | `standard-model`, `particle-model`                |
-| Periodic table       | `periodic-table`, `periodic`                      |
+| Canonical type       | Accepted `type` values                             |
+| -------------------- | -------------------------------------------------- |
+| Line                 | `line` (also the fallback when a type is unknown)  |
+| Scatter              | `scatter`                                          |
+| Area                 | `area`                                             |
+| Bar                  | `bar`                                              |
+| Pie / donut          | `pie`, `donut`, `doughnut`                         |
+| Radar                | `radar`, `spider`, `spider-chart`                  |
+| Ratio / pull         | `ratio`, `pull`, `ratio-panel`, `pull-panel`       |
+| Efficiency           | `efficiency`, `acceptance`                         |
+| ROC                  | `roc`, `roc-curve`                                 |
+| Polar                | `polar`, `radial`                                  |
+| Stacked bar          | `stacked-bar`, `normalized-stacked-bar`            |
+| Ternary              | `ternary`, `triangle`                              |
+| Forest               | `forest`, `forest-plot`                            |
+| Corner               | `corner`, `pair`, `pair-plot`                      |
+| QQ / probability     | `qq`, `qq-plot`, `probability`, `probability-plot` |
+| ECDF / survival      | `ecdf`, `cdf`, `survival`, `survival-curve`        |
+| Precision–recall     | `precision-recall`, `pr`, `pr-curve`               |
+| Volcano              | `volcano`                                          |
+| Waterfall            | `waterfall`                                        |
+| Sankey / alluvial    | `sankey`, `alluvial`                               |
+| Time series          | `time-series`, `timeseries`                        |
+| Geographic           | `geographic`, `geo`, `map`                         |
+| Histogram            | `histogram`, `hist`                                |
+| Stacked histogram    | `stacked-histogram`, `stacked-hist`                |
+| Normalized histogram | `normalized-histogram`, `normalized-hist`          |
+| Box plot             | `box`, `boxplot`                                   |
+| Heatmap              | `heatmap`, `correlation`                           |
+| Contour              | `contour`                                          |
+| Covariance ellipse   | `covariance`, `error-ellipse`, `ellipse`           |
+| 2D density           | `density2d`, `density-2d`, `kde2d`                 |
+| Hexbin               | `hexbin`                                           |
+| Quiver               | `quiver`, `vector`                                 |
+| Streamline           | `streamline`, `streamlines`                        |
+| Profile histogram    | `profile`, `profile-histogram`                     |
+| Ridgeline            | `ridgeline`, `ridge`                               |
+| Violin               | `violin`                                           |
+| Surface              | `surface`, `surface3d`                             |
+| Function             | `function`, `function2d`, `curve`                  |
+| Standard Model       | `standard-model`, `particle-model`                 |
+| Periodic table       | `periodic-table`, `periodic`                       |
 
 ## Core data fields
 
@@ -159,6 +177,15 @@ The following inventory is generated directly from the parser. Exact names are g
 
 `title-color`, `title-size`, `title-font`, `title-offset-x`, `title-offset-y`, `title-alpha`, `caption`, `caption-size`, `caption-color`, `caption-align`, `caption-font`, `caption-offset-x`, `caption-offset-y`, `plot-alpha`, `plot-offset-x`, `plot-offset-y`, `plot-width`, `plot-height`, `chart-width`, `chart-height`
 
+`plot-width` and `plot-height` also size the specialized scientific renderers, including
+ratio, efficiency, ROC, polar, ternary, forest, corner, ECDF/survival, volcano,
+waterfall, Sankey, time-series, geographic, scalar-field, and 3D surface plots.
+Use the same CSS-length syntax as the original renderers, for example
+`plot-width: 620px` and `plot-height: 370px`. Unitless numbers remain supported
+and are interpreted as pixels.
+The sizing remains responsive inside `::group`, `::columns`, and `::grid` blocks;
+`plot-width: 100%` fills the available group, column, or grid cell.
+
 ### Axes, grid, ticks, and labels
 
 `axis-color`, `axis-width`, `axis-alpha`, `grid-color`, `grid-width`, `grid-alpha`, `tick-color`, `tick-size`, `tick-font`, `tick-offset-x`, `tick-offset-y`, `tick-alpha`, `x-scale`, `y-scale`, `x-min`, `x-max`, `y-min`, `y-max`, `y-axis-digits`, `frame-top`, `frame-right`, `minor-ticks`, `tick-divisions`, `tick-length`, `minor-tick-length`, `x-label-color`, `x-label-size`, `x-label-font`, `x-label-offset-x`, `x-label-offset-y`, `x-label-alpha`, `y-label-color`, `y-label-size`, `y-label-font`, `y-label-offset-x`, `y-label-offset-y`, `y-label-alpha`, `right-y-label`, `right-y-min`, `right-y-max`, `right-y-scale`, `right-y-axis-digits`, `right-axis-color`, `right-tick-color`, `right-tick-size`, `right-tick-font`, `right-y-label-color`, `right-y-label-size`, `right-y-label-font`
@@ -181,7 +208,7 @@ The following inventory is generated directly from the parser. Exact names are g
 
 ### Histogram and stacking
 
-`profile-error`, `profile-min-count`, `ridgeline-fill-alpha`, `ridgeline-overlap`, `ridgeline-palette`, `stack-normalized`, `stack-palette`, `violin-bandwidth`, `violin-fill-color`, `violin-fill-alpha`, `fill`, `bin-edges`, `bin-counts`, `bin-edges-field`, `bin-counts-field`, `bin-gap`, `bin-line`, `bin-lines`, `vertical-lines`
+`profile-error`, `profile-min-count`, `stack-bar-gap`, `stack-bar-normalized`, `ridgeline-fill-alpha`, `ridgeline-overlap`, `ridgeline-palette`, `stack-normalized`, `stack-palette`, `violin-bandwidth`, `violin-fill-color`, `violin-fill-alpha`, `fill`, `bin-edges`, `bin-counts`, `bin-edges-field`, `bin-counts-field`, `bin-gap`, `bin-line`, `bin-lines`, `vertical-lines`
 
 ### Fit and fit band
 
@@ -217,7 +244,7 @@ The following inventory is generated directly from the parser. Exact names are g
 
 ### Other registered keys
 
-`ticks-top`, `ticks-right`, `ticks-bottom`, `ticks-left`
+`corner-bins`, `corner-label-size`, `efficiency-confidence`, `efficiency-total`, `forest-line-color`, `forest-zero`, `polar-grid-levels`, `polar-max`, `polar-start-angle`, `ratio-denominator`, `ratio-mode`, `ratio-reference`, `ternary-a-label`, `ternary-b-label`, `ternary-c-label`, `ternary-grid-levels`, `pie-colors`, `pie-inner-radius`, `pie-label-color`, `pie-label-position`, `pie-label-size`, `pie-labels`, `pie-start-angle`, `pie-stroke-color`, `pie-stroke-width`, `radar-fill-alpha`, `radar-grid-color`, `radar-grid-levels`, `radar-label-color`, `radar-label-size`, `radar-max`, `radar-min`, `radar-point-size`, `radar-stroke-width`, `ticks-top`, `ticks-right`, `ticks-bottom`, `ticks-left`
 
 ### Per-statistic item style keys
 

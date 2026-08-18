@@ -283,6 +283,10 @@ export function hydrateDataNode(
   location = node.source,
   contentType = 'application/json'
 ) {
+  if (node.type === 'chart' && node.kind === 'geographic' && isJsonSource(location, contentType)) {
+    const value = JSON.parse(source);
+    if (value?.type === 'FeatureCollection') return hydrateGeoJson(node, value);
+  }
   const { headers, rows } = parseExternalData(source, location, contentType);
   if (node.type === 'table') {
     if (headers.length === 0) throw new Error('No column headers found');
@@ -305,6 +309,22 @@ export function hydrateDataNode(
         : {})
     });
   }
+  if (['qq', 'ecdf'].includes(node.kind)) return hydrateSamplePlot(node, headers, rows);
+  if (node.kind === 'contour') return hydrateContour(node, headers, rows);
+  if (node.kind === 'ternary') return hydrateTernary(node, headers, rows);
+  if (node.kind === 'efficiency' && getPlotStyle(node)['efficiency-total-field'])
+    return hydrateEfficiency(node, headers, rows);
+  if (node.kind === 'sankey') return hydrateSankey(node, headers, rows);
+  if (node.kind === 'time-series') return hydrateTimeSeries(node, headers, rows);
+  if (
+    node.kind === 'forest' &&
+    (getPlotStyle(node)['forest-lower-field'] || getPlotStyle(node)['forest-upper-field'])
+  )
+    return hydrateForest(node, headers, rows);
+  if (node.kind === 'waterfall' && getPlotStyle(node)['waterfall-total-field'])
+    return hydrateWaterfall(node, headers, rows);
+  if (node.kind === 'geographic' && getPlotStyle(node)['geo-region-field'])
+    return hydrateGeographicRegions(node, headers, rows);
   if (node.kind === 'surface') {
     const xIndex = getColumnIndex(headers, node.xField, 0);
     const yIndex = getColumnIndex(headers, node.yField, 1);
@@ -414,7 +434,7 @@ export function hydrateDataNode(
       (item) =>
         item.label !== '' &&
         Number.isFinite(item.value) &&
-        (node.kind !== 'scatter' || Number.isFinite(item.x)) &&
+        (!numericXKinds.has(node.kind) || Number.isFinite(item.x)) &&
         (errorIndex < 0 || (Number.isFinite(item.error) && item.error >= 0)) &&
         (errorLowIndex < 0 || (Number.isFinite(item.errorLow) && item.errorLow >= 0)) &&
         (errorHighIndex < 0 || (Number.isFinite(item.errorHigh) && item.errorHigh >= 0))
@@ -452,14 +472,366 @@ export function hydrateDataNode(
       : withBubbleSizes;
   return node.with({
     attributes: withXErrors,
-    labels: data.map((item) => item.label),
+    labels: data.map((item) => (pointLabelIndex >= 0 ? item.pointLabel : item.label)),
     values: data.map((item) => item.value),
-    ...(node.kind === 'scatter' ? { xValues: data.map((item) => item.x) } : {}),
+    ...(numericXKinds.has(node.kind) ? { xValues: data.map((item) => item.x) } : {}),
     ...(errorIndex >= 0 ? { errorValues: data.map((item) => item.error) } : {}),
     ...(xErrorIndex >= 0
       ? { attributes: { ...withXErrors, xErrorValues: data.map((item) => item.xError) } }
       : {})
   });
+}
+
+const numericXKinds = new Set(['scatter', 'volcano', 'density2d', 'geographic']);
+
+function getPlotStyle(node) {
+  return node.getAttribute?.('plotStyle') ?? {};
+}
+
+function getPointLabelIndex(node, headers) {
+  const field = String(getPlotStyle(node)['point-label-field'] ?? '').trim();
+  return field ? getColumnIndex(headers, field, -1) : -1;
+}
+
+function hydrateSamplePlot(node, headers, rows) {
+  const style = getPlotStyle(node);
+  const valueIndex = getColumnIndex(headers, node.valueField, 0);
+  const values = readNumericColumn(rows, valueIndex);
+  if (values.length === 0) throw new Error('No usable numeric samples found');
+  const eventField = String(style['survival-event-field'] ?? '').trim();
+  if (!eventField) {
+    return node.with({ labels: values.map((_, index) => String(index + 1)), values });
+  }
+  const eventIndex = getColumnIndex(headers, eventField, -1);
+  const events = rows.map((row) => Number(row[eventIndex]));
+  if (events.length !== values.length || events.some((event) => event !== 0 && event !== 1))
+    throw new Error('Survival event status must contain one 0 or 1 value for every time');
+  return node.with({
+    labels: values.map((_, index) => String(index + 1)),
+    values,
+    attributes: {
+      ...node.attributes,
+      plotStyle: { ...style, 'survival-events': events.join(',') }
+    }
+  });
+}
+
+function hydrateContour(node, headers, rows) {
+  const xIndex = getColumnIndex(headers, node.xField, 0);
+  const yIndex = getColumnIndex(headers, node.yField, 1);
+  const valueIndex = getColumnIndex(headers, node.valueField, 2);
+  const points = numericPoints(rows, xIndex, yIndex, valueIndex);
+  if (points.length === 0) throw new Error('No usable contour points found');
+  const xValues = [...new Set(points.map((point) => point.x))].sort((a, b) => a - b);
+  const yValues = [...new Set(points.map((point) => point.y))].sort((a, b) => a - b);
+  const grid = new Map(points.map((point) => [`${point.x}\0${point.y}`, point.value]));
+  if (grid.size !== xValues.length * yValues.length)
+    throw new Error('Contour data must provide exactly one value for every x/y grid position');
+  const values = yValues.flatMap((y) =>
+    xValues.map((x) => {
+      const value = grid.get(`${x}\0${y}`);
+      if (!Number.isFinite(value)) throw new Error('Contour data grid is incomplete');
+      return value;
+    })
+  );
+  return node.with({
+    labels: values.map((_, index) => String(index + 1)),
+    xValues,
+    values,
+    attributes: { ...node.attributes, heatmapYValues: yValues }
+  });
+}
+
+function hydrateTernary(node, headers, rows) {
+  const xIndex = getColumnIndex(headers, node.xField, 0);
+  const yIndex = getColumnIndex(headers, node.yField, 1);
+  const valueIndex = getColumnIndex(headers, node.valueField, 2);
+  const labelIndex = getPointLabelIndex(node, headers);
+  const points = numericPoints(rows, xIndex, yIndex, valueIndex, labelIndex);
+  if (points.length === 0) throw new Error('No usable ternary points found');
+  if (points.some((point) => point.x < 0 || point.y < 0 || point.value < 0))
+    throw new Error('Ternary components cannot be negative');
+  return node.with({
+    labels: points.map((point, index) => point.label || String(index + 1)),
+    xValues: points.map((point) => point.x),
+    values: points.map((point) => point.value),
+    attributes: {
+      ...node.attributes,
+      heatmapYValues: points.map((point) => point.y),
+      ...(labelIndex >= 0 ? { pointLabelValues: points.map((point) => point.label) } : {})
+    }
+  });
+}
+
+function hydrateEfficiency(node, headers, rows) {
+  const style = getPlotStyle(node);
+  const labelIndex = getColumnIndex(headers, node.xField, 0);
+  const passedIndex = getColumnIndex(headers, node.yField, 1);
+  const totalIndex = getColumnIndex(headers, String(style['efficiency-total-field']), -1);
+  const data = rows
+    .map((row) => ({
+      label: String(row[labelIndex] ?? ''),
+      passed: Number(row[passedIndex]),
+      total: Number(row[totalIndex])
+    }))
+    .filter(
+      (item) =>
+        item.label &&
+        Number.isFinite(item.passed) &&
+        Number.isFinite(item.total) &&
+        item.total > 0 &&
+        item.passed >= 0 &&
+        item.passed <= item.total
+    );
+  if (data.length === 0) throw new Error('No usable efficiency numerator/denominator rows found');
+  return node.with({
+    labels: data.map((item) => item.label),
+    values: data.map((item) => item.passed),
+    attributes: {
+      ...node.attributes,
+      plotStyle: { ...style, 'efficiency-total': data.map((item) => item.total).join(',') }
+    }
+  });
+}
+
+function hydrateSankey(node, headers, rows) {
+  const style = getPlotStyle(node);
+  const sourceIndex = getColumnIndex(headers, String(style['sankey-source-field'] ?? ''), 0);
+  const targetIndex = getColumnIndex(headers, String(style['sankey-target-field'] ?? ''), 1);
+  const valueIndex = getColumnIndex(headers, String(style['sankey-value-field'] ?? ''), 2);
+  const links = rows
+    .map((row) => ({
+      source: String(row[sourceIndex] ?? '').trim(),
+      target: String(row[targetIndex] ?? '').trim(),
+      value: Number(row[valueIndex])
+    }))
+    .filter((link) => link.source && link.target && Number.isFinite(link.value) && link.value >= 0);
+  if (links.length === 0) throw new Error('No usable Sankey links found');
+  return node.with({
+    attributes: {
+      ...node.attributes,
+      series: links.map((link) => ({
+        name: `${link.source} -> ${link.target}`,
+        labels: [],
+        values: [link.value],
+        xValues: []
+      }))
+    }
+  });
+}
+
+function hydrateTimeSeries(node, headers, rows) {
+  const style = getPlotStyle(node);
+  const labelIndex = getColumnIndex(headers, node.xField, 0);
+  const valueIndex = getColumnIndex(headers, node.yField, 1);
+  const errorIndex = node.errorField ? getColumnIndex(headers, node.errorField, -1) : -1;
+  const data = rows
+    .map((row) => ({
+      label: String(row[labelIndex] ?? '').trim(),
+      valueText: String(row[valueIndex] ?? '').trim(),
+      errorText: errorIndex < 0 ? '' : String(row[errorIndex] ?? '').trim()
+    }))
+    .filter((item) => item.label);
+  if (data.length === 0) throw new Error('No usable time-series rows found');
+  const missing = [];
+  const values = data.map((item, index) => {
+    if (item.valueText === '') {
+      missing.push(index);
+      return 0;
+    }
+    const value = Number(item.valueText);
+    if (!Number.isFinite(value)) throw new Error(`Invalid time-series value at ${item.label}`);
+    return value;
+  });
+  const errorValues = data.map((item) => {
+    if (item.errorText === '') return 0;
+    const error = Number(item.errorText);
+    if (!Number.isFinite(error) || error < 0)
+      throw new Error(`Invalid time-series uncertainty at ${item.label}`);
+    return error;
+  });
+  if (missing.length === data.length) throw new Error('Time series contains no measurements');
+  return node.with({
+    labels: data.map((item) => item.label),
+    values,
+    ...(errorIndex >= 0 ? { errorValues } : {}),
+    attributes: {
+      ...node.attributes,
+      plotStyle: { ...style, 'time-missing': missing.join(',') }
+    }
+  });
+}
+
+function hydrateForest(node, headers, rows) {
+  const style = getPlotStyle(node);
+  if (!style['forest-lower-field'] || !style['forest-upper-field'])
+    throw new Error('Forest external data requires both forest-lower-field and forest-upper-field');
+  const labelIndex = getColumnIndex(headers, node.xField, 0);
+  const valueIndex = getColumnIndex(headers, node.yField, 1);
+  const lowerIndex = getColumnIndex(headers, String(style['forest-lower-field'] ?? ''), -1);
+  const upperIndex = getColumnIndex(headers, String(style['forest-upper-field'] ?? ''), -1);
+  const data = rows
+    .map((row) => ({
+      label: String(row[labelIndex] ?? '').trim(),
+      value: Number(row[valueIndex]),
+      lower: Number(row[lowerIndex]),
+      upper: Number(row[upperIndex])
+    }))
+    .filter(
+      (item) =>
+        item.label &&
+        Number.isFinite(item.value) &&
+        Number.isFinite(item.lower) &&
+        Number.isFinite(item.upper) &&
+        item.lower <= item.value &&
+        item.value <= item.upper
+    );
+  if (data.length === 0) throw new Error('No usable forest estimates and confidence limits found');
+  return node.with({
+    labels: data.map((item) => item.label),
+    values: data.map((item) => item.value),
+    attributes: {
+      ...node.attributes,
+      asymmetricErrors: {
+        lower: data.map((item) => item.value - item.lower),
+        upper: data.map((item) => item.upper - item.value)
+      }
+    }
+  });
+}
+
+function hydrateWaterfall(node, headers, rows) {
+  const style = getPlotStyle(node);
+  const labelIndex = getColumnIndex(headers, node.xField, 0);
+  const valueIndex = getColumnIndex(headers, node.yField, 1);
+  const totalIndex = getColumnIndex(headers, String(style['waterfall-total-field']), -1);
+  const data = rows
+    .map((row) => ({
+      label: String(row[labelIndex] ?? '').trim(),
+      value: Number(row[valueIndex]),
+      total: /^(?:1|true|yes|total)$/i.test(String(row[totalIndex] ?? '').trim())
+    }))
+    .filter((item) => item.label && Number.isFinite(item.value));
+  if (data.length === 0) throw new Error('No usable waterfall rows found');
+  return node.with({
+    labels: data.map((item) => item.label),
+    values: data.map((item) => item.value),
+    attributes: {
+      ...node.attributes,
+      plotStyle: {
+        ...style,
+        'waterfall-total-indices': data
+          .flatMap((item, index) => (item.total ? [index] : []))
+          .join(',')
+      }
+    }
+  });
+}
+
+function hydrateGeographicRegions(node, headers, rows) {
+  const style = getPlotStyle(node);
+  const regionIndex = getColumnIndex(headers, String(style['geo-region-field']), -1);
+  const xIndex = getColumnIndex(headers, node.xField, 0);
+  const yIndex = getColumnIndex(headers, node.yField, 1);
+  const regions = new Map();
+  for (const row of rows) {
+    const name = String(row[regionIndex] ?? '').trim();
+    const x = Number(row[xIndex]);
+    const y = Number(row[yIndex]);
+    if (!name || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const region = regions.get(name) ?? { name, labels: [], xValues: [], values: [] };
+    region.xValues.push(x);
+    region.values.push(y);
+    regions.set(name, region);
+  }
+  if (regions.size === 0) throw new Error('No usable geographic regions found');
+  return node.with({
+    labels: [],
+    values: [],
+    attributes: { ...node.attributes, series: [...regions.values()] }
+  });
+}
+
+function hydrateGeoJson(node, collection) {
+  const style = getPlotStyle(node);
+  const nameField = String(style['geo-name-field'] ?? 'name').trim();
+  const valueField = String(style['geo-value-field'] ?? '').trim();
+  const points = [];
+  const regions = [];
+  const featureName = (feature, index) =>
+    String(feature?.properties?.[nameField] ?? feature?.id ?? `Feature ${index + 1}`);
+  const featureValue = (feature) => {
+    if (!valueField) return null;
+    const value = Number(feature?.properties?.[valueField]);
+    return Number.isFinite(value) ? value : null;
+  };
+  const addPolygon = (coordinates, name, geoValue) => {
+    const exterior = Array.isArray(coordinates?.[0]) ? coordinates[0] : [];
+    const valid = exterior
+      .map((coordinate) => ({ x: Number(coordinate?.[0]), y: Number(coordinate?.[1]) }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+    if (valid.length >= 3)
+      regions.push({
+        name,
+        geoValue,
+        labels: [],
+        xValues: valid.map((point) => point.x),
+        values: valid.map((point) => point.y)
+      });
+  };
+  for (const [index, feature] of (collection.features ?? []).entries()) {
+    const geometry = feature?.geometry;
+    const name = featureName(feature, index);
+    const geoValue = featureValue(feature);
+    if (geometry?.type === 'Point') {
+      const x = Number(geometry.coordinates?.[0]);
+      const y = Number(geometry.coordinates?.[1]);
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push({ name, x, y, geoValue });
+    } else if (geometry?.type === 'Polygon') {
+      addPolygon(geometry.coordinates, name, geoValue);
+    } else if (geometry?.type === 'MultiPolygon') {
+      geometry.coordinates?.forEach((polygon, polygonIndex) =>
+        addPolygon(
+          polygon,
+          geometry.coordinates.length > 1 ? `${name} ${polygonIndex + 1}` : name,
+          geoValue
+        )
+      );
+    }
+  }
+  if (points.length === 0 && regions.length === 0)
+    throw new Error('GeoJSON contains no usable Point, Polygon, or MultiPolygon features');
+  if (
+    valueField &&
+    ![...points.map((point) => point.geoValue), ...regions.map((region) => region.geoValue)].some(
+      Number.isFinite
+    )
+  )
+    throw new Error(`GeoJSON property "${valueField}" has no usable numeric feature values`);
+  return node.with({
+    labels: points.map((point) => point.name),
+    xValues: points.map((point) => point.x),
+    values: points.map((point) => point.y),
+    attributes: {
+      ...node.attributes,
+      series: regions,
+      geoPointValues: points.map((point) => point.geoValue)
+    }
+  });
+}
+
+function numericPoints(rows, xIndex, yIndex, valueIndex, labelIndex = -1) {
+  return rows
+    .map((row) => ({
+      x: Number(row[xIndex]),
+      y: Number(row[yIndex]),
+      value: Number(row[valueIndex]),
+      label: labelIndex < 0 ? '' : String(row[labelIndex] ?? '')
+    }))
+    .filter(
+      (point) =>
+        Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.value)
+    );
 }
 
 function hasPreBinnedFieldSource(node) {
@@ -623,9 +995,15 @@ function parseCsvRow(line) {
 }
 
 function parseExternalData(source, location, contentType) {
-  const isJson =
-    /(?:application|text)\/json/i.test(contentType ?? '') || /\.json(?:$|[?#])/i.test(location);
+  const isJson = isJsonSource(location, contentType);
   return isJson ? parseJson(source) : parseCsv(source);
+}
+
+function isJsonSource(location, contentType) {
+  return (
+    /(?:application|text)\/(?:geo\+)?json/i.test(contentType ?? '') ||
+    /\.(?:geo)?json(?:$|[?#])/i.test(location)
+  );
 }
 
 function parseJson(source) {
@@ -685,4 +1063,3 @@ function formatJsonCell(value) {
   if (value === null || value === undefined) return '';
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
-

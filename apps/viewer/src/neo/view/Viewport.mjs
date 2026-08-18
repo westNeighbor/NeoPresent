@@ -8,6 +8,7 @@ import { hydrateDataNode, hydrateSlideChartData } from '../chartData.mjs';
 import { createSlideVdom } from '../createSlideView.mjs';
 import { getTheme } from '../theme.mjs';
 import ViewportController from './ViewportController.mjs';
+import { getGalleryLayout, getHelixLayout } from './overviewLayout.mjs';
 
 /** Creates a Neo viewport for an already-compiled presentation deck. */
 export function createViewport(
@@ -1628,35 +1629,8 @@ function createOverviewSurface(
         cn: deck.children.map((slide, index) => {
           const slideTheme = getSlideTheme(slide);
           const selected = index === overviewIndex;
-          const galleryColumnCount = Math.max(1, Math.ceil(deck.children.length / 3));
-          const galleryRow = Math.floor(index / galleryColumnCount);
-          const selectedGalleryRow = Math.floor(overviewIndex / galleryColumnCount);
-          const galleryColumnInRow = index % galleryColumnCount;
-          const selectedGalleryColumnInRow = overviewIndex % galleryColumnCount;
-          const galleryColumn =
-            galleryRow % 2 === 0 ? galleryColumnInRow : galleryColumnCount - 1 - galleryColumnInRow;
-          const selectedGalleryColumn =
-            selectedGalleryRow % 2 === 0
-              ? selectedGalleryColumnInRow
-              : galleryColumnCount - 1 - selectedGalleryColumnInRow;
-          const helixAngle = (index - overviewIndex) * 32;
-          const helixRadians = (helixAngle * Math.PI) / 180;
-          const helixRadius = 720;
-          const helixX = Math.sin(helixRadians) * helixRadius;
-          const helixY = helixAngle * 1.2;
-          const helixZ = Math.cos(helixRadians) * helixRadius - helixRadius;
-          const opacityAngle = Math.min(180, Math.abs(helixAngle % 360));
-          const helixOpacity = 0.3 + 0.5 * (1 - Math.sin((opacityAngle * Math.PI) / 360));
-          const previousHelixAngle = helixAngle + galleryRotationDirection * 32;
-          const previousHelixRadians = (previousHelixAngle * Math.PI) / 180;
-          const previousHelixX = Math.sin(previousHelixRadians) * helixRadius;
-          const previousHelixY = previousHelixAngle * 1.2;
-          const previousHelixZ = Math.cos(previousHelixRadians) * helixRadius - helixRadius;
-          const previousOpacityAngle = Math.min(180, Math.abs(previousHelixAngle % 360));
-          const previousHelixOpacity =
-            0.3 + 0.5 * (1 - Math.sin((previousOpacityAngle * Math.PI) / 360));
-          const helixTransform = `translate3d(calc(50vw + ${helixX}px), calc(50vh + ${helixY}px), ${helixZ}px) translate(-50%, -50%) rotateY(${helixAngle}deg)`;
-          const previousHelixTransform = `translate3d(calc(50vw + ${previousHelixX}px), calc(50vh + ${previousHelixY}px), ${previousHelixZ}px) translate(-50%, -50%) rotateY(${previousHelixAngle}deg)`;
+          const gallery = getGalleryLayout(index, overviewIndex, deck.children.length);
+          const helix = getHelixLayout(index, overviewIndex, galleryRotationDirection);
           const [aspectWidth, aspectHeight] = String(
             aspectOverride || slide.getAttribute?.('aspect') || '16:9'
           )
@@ -1671,10 +1645,10 @@ function createOverviewSurface(
               neopresentOverviewSelected: String(selected)
             },
             style: {
-              '--neopresent-helix-from-opacity': previousHelixOpacity,
-              '--neopresent-helix-from-transform': previousHelixTransform,
-              '--neopresent-helix-to-opacity': selected ? 1 : helixOpacity,
-              '--neopresent-helix-to-transform': helixTransform,
+              '--neopresent-helix-from-opacity': helix.previous.opacity,
+              '--neopresent-helix-from-transform': helix.previous.transform,
+              '--neopresent-helix-to-opacity': selected ? 1 : helix.opacity,
+              '--neopresent-helix-to-transform': helix.transform,
               animation:
                 mode === 'helix' && galleryRotationDirection !== 0
                   ? 'neopresent-helix-card-move 1000ms ease-in-out both'
@@ -1702,7 +1676,7 @@ function createOverviewSurface(
                   : mode === 'helix'
                     ? selected
                       ? 1
-                      : helixOpacity
+                      : helix.opacity
                     : 1,
               overflow: mode === 'gallery' ? 'visible' : 'hidden',
               position: mode === 'gallery' || mode === 'helix' ? 'absolute' : undefined,
@@ -1711,9 +1685,9 @@ function createOverviewSurface(
               top: mode === 'gallery' || mode === 'helix' ? 0 : undefined,
               transform:
                 mode === 'gallery'
-                  ? `translate3d(calc(50vw + ${(galleryColumn - selectedGalleryColumn) * 350}px), calc(50vh + ${(galleryRow - selectedGalleryRow) * 290}px), 0) translate(-50%, -50%)`
+                  ? `translate3d(calc(50vw + ${(gallery.column - gallery.selectedColumn) * 350}px), calc(50vh + ${(gallery.row - gallery.selectedRow) * 290}px), 0) translate(-50%, -50%)`
                   : mode === 'helix'
-                    ? helixTransform
+                    ? helix.transform
                     : undefined,
               transition:
                 mode === 'gallery'

@@ -74,6 +74,11 @@ data-size: 3
 
 Use `symbol` or `data-symbol` for markers. Common values include `circle`, `square`, `triangle-up`, `triangle-down`, `diamond`, `cross`, `plus`, `star`, and their open variants.
 
+`x:` accepts either numeric coordinates or categorical labels. For example,
+`x: A, B, C` places `A`, `B`, and `C` on the X axis, while `x: 1, 2, 3`
+uses a numeric scale. The explicit `labels:` field remains available when you
+want to provide categories separately from the X coordinates.
+
 The full set also includes compound ROOT-style markers and aliases such as
 `kFullCircle`, `kOpenSquare`, and `kFullFourTrianglesX`. See
 [Marker symbols](plot-settings-reference.md#marker-symbols).
@@ -223,6 +228,34 @@ Each bar has its own series-and-category hover tooltip. Series-specific
 `animation`, `animation-delay`, `animation-duration`, and
 `animation-easing` values are supported. Negative values extend below the
 shared zero baseline.
+
+By default, a plot block—including its glass, border, and shadow effects—wraps
+the plot's rendered SVG rather than stretching across the slide. Use
+`chart-width: 100%` when a deliberately full-width plot panel is desired.
+`plot-width` controls the internal plotting frame, while `chart-width` controls
+the complete outer plot block.
+
+Use `chart-padding` to add space around the complete block. It follows CSS
+padding order:
+
+```markdown
+chart-padding: 12px 20px
+```
+
+Some fixed-canvas plots intentionally reserve space for labels or larger data
+layouts. To remove unused canvas space, use `chart-trim` in SVG pixels with
+`top right bottom left` order:
+
+```markdown
+# Radar, donut, or polar: trim the left and right sides
+chart-trim: 0 80 0 80
+
+# Sparse Sankey/alluvial: trim unused space below
+chart-trim: 0 0 90 0
+```
+
+Trimming changes the SVG view box rather than clipping with CSS, so the plot
+remains vector and the outer glass, border, or shadow follows the tighter box.
 
 ## Pie and donut charts
 

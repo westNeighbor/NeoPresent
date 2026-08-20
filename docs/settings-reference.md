@@ -31,6 +31,13 @@ Put these before the first slide.
 | `@heading-position`                                              | `flow`, `top`, `center`, or `bottom`                                                     |
 | `@heading-align`                                                 | `left`, `center`, or `right`                                                             |
 | `@heading-offset`                                                | Two lengths, for example `12px, -6px`                                                    |
+| `@heading-panel-width`                                           | CSS width, for example `fit-content` or `72%`                                            |
+| `@heading-panel-max-width`                                       | CSS maximum width, for example `92%`                                                     |
+| `@heading-panel-padding`                                         | CSS padding, for example `.10em .28em .12em`                                             |
+| `@block-shadow` and its suffixes                                 | Shadow defaults for all content blocks; see the shadow controls below                    |
+| `@heading-shadow`, `@plot-shadow`, `@image-shadow`, `@pdf-shadow`, `@table-shadow`, `@code-shadow`, `@quote-shadow` | Targeted deck-wide shadow defaults |
+| `@block-glass` and its suffixes                                  | Deck-wide glass defaults for all blocks                                                   |
+| `@heading-glass`, `@plot-glass`, `@image-glass`, `@pdf-glass`, `@table-glass`, `@code-glass`, `@quote-glass`, `@footer-glass` | Targeted deck-wide glass defaults |
 | `@footer` / `@footer-center`                                     | Center footer text                                                                       |
 | `@footer-left`, `@footer-right`                                  | Left/right footer text                                                                   |
 | `@footer-font`                                                   | Font for all footer slots                                                                |
@@ -44,6 +51,8 @@ Put these before the first slide.
 | `@footer-shadow-distance`                                        | CSS length                                                                               |
 | `@footer-shadow-offset`                                          | Direct `x, y` offset instead of angle/distance                                           |
 | `@footer-shadow-blur`                                            | CSS length                                                                               |
+| `@footer-shadow-curve`, `@footer-shadow-size`                    | Curved-shadow shape and spread                                                           |
+| `@footer-shadow-perspective`                                    | Contact-shadow perspective from `-100` to `100`                                          |
 | `@logo`                                                          | Local/remote logo source                                                                 |
 | `@logo-offset`                                                   | Logo `x, y` offset                                                                       |
 | `@page-number`                                                   | `on`/`off` and boolean equivalents                                                       |
@@ -85,6 +94,9 @@ Put these after `---` and before the affected slide content.
 | `@heading-position`                                                 | `flow`, `top`, `center`, or `bottom`                                                                     |
 | `@heading-align`                                                    | `left`, `center`, or `right`                                                                             |
 | `@heading-offset`                                                   | Two CSS lengths                                                                                          |
+| `@heading-panel-width`                                              | CSS width for the primary heading panel                                                                  |
+| `@heading-panel-max-width`                                          | CSS maximum width for the primary heading panel                                                          |
+| `@heading-panel-padding`                                            | CSS padding for the primary heading panel                                                                |
 | `@hide-footer`                                                      | Hide footer on this slide                                                                                |
 | `@toc`                                                              | Generate a TOC slide; optional title follows                                                             |
 | `@toc-columns`                                                      | `1` through `5`                                                                                          |
@@ -101,17 +113,24 @@ These affect the next compatible block or block sequence.
 
 | Directive                    | Values                                                              |
 | ---------------------------- | ------------------------------------------------------------------- |
-| `@block-enter`               | `fade`, `grow`, `rise`, or `zoom`; omitted value defaults to `fade` |
+| `@block-enter`               | `fade`, `grow`, `rise`, `zoom`, or `morph`; omitted value defaults to `fade` |
 | `@block-exit`                | `replace` or `shrink`; `shrink` may include a percentage            |
 | `@block-transition-trigger`  | `auto` or `reveal`                                                  |
 | `@block-transition-duration` | Duration                                                            |
 | `@block-transition-delay`    | Duration                                                            |
 
+Plot blocks used with `@block-enter morph` also accept `morph-match` (`auto`,
+`index`, `x`, or `key`), `morph-axis` (boolean), and `morph-text` (`crossfade`
+or `none`). Semantic mark morphing is available for line, area, scatter, bar,
+grouped-bar, histogram, pie/donut, radar, and polar-function plots.
+Sampled `function:` overlays and fitted curves/bands are also matched
+semantically; fits use `fit-id`, and changed fit-result text crossfades.
+
 ## Block and inline visual effects
 
 Block directives use `@name value`. Inline spans use `{{style:name=value;...|text}}`. The same effect engine accepts:
 
-`scale`, `offset`, `fill`, `fill-alpha`, `frame-color`, `color`, `color-alpha`, `size`, `font`, `alpha`, `glass`, `glass-color`, `glass-alpha`, `glass-transparency`, `glass-blur`, `glass-saturation`, `glass-thickness`, `glass-edge-color`, `glass-edge-alpha`, `glass-depth`, `glass-depth-alpha`, `glass-radius`, `border`, `border-style`, `border-color`, `border-alpha`, `border-size`, `border-radius`, `border-padding`, `frame-inner-color`, `frame-scale`, `shadow`, `shadow-color`, `shadow-opacity`, `shadow-angle`, `shadow-distance`, `shadow-offset`, `shadow-blur`, `shadow-curve`, `shadow-size`, and `reflection`.
+`scale`, `offset`, `fill`, `fill-alpha`, `frame-color`, `color`, `color-alpha`, `size`, `font`, `alpha`, `glass`, `glass-color`, `glass-alpha`, `glass-transparency`, `glass-blur`, `glass-saturation`, `glass-thickness`, `glass-edge-color`, `glass-edge-alpha`, `glass-depth`, `glass-depth-alpha`, `glass-radius`, `border`, `border-style`, `border-color`, `border-alpha`, `border-size`, `border-radius`, `border-padding`, `frame-inner-color`, `frame-scale`, `shadow`, `shadow-color`, `shadow-opacity`, `shadow-angle`, `shadow-distance`, `shadow-offset`, `shadow-blur`, `shadow-curve`, `shadow-size`, `shadow-perspective`, and `reflection`.
 
 Block-only sticky-note controls are `sticky-width`, `sticky-rotation`, `sticky-fill`, `sticky-alpha`, `sticky-tape`, `sticky-tape-alpha`, and `sticky-position`.
 
@@ -120,6 +139,7 @@ Accepted enumerations:
 - `border`: `line`, `picture`, or `picture-frame`.
 - `border-style`: `solid`, `dashed`, `dotted`, or `double`.
 - `shadow`: `drop`, `box`, `box-shadow`, `contact`, or `curved`.
+- `shadow-perspective`: `-100` to `100`; controls the horizontal footprint of a contact shadow.
 - `shadow-curve`: `inward`, `outward`, or a numeric amount.
 - `glass`: `on`, `true`, `yes`, `glass`, or `1`.
 
@@ -232,6 +252,15 @@ Fence names: `iframe`, `embed`. Keys: `src` and `title`. `src` must be HTTP(S), 
 ## Code blocks
 
 Any unrecognized fence is displayed as code. Supported flags after the language:
+
+Built-in syntax highlighting covers 28 language families:
+
+- JavaScript (`js`, `javascript`, `jsx`) and TypeScript (`typescript`, `ts`, `tsx`)
+- Python (`python`, `py`), R (`r`), Julia (`julia`, `jl`), and MATLAB/Octave (`matlab`, `octave`)
+- C/C++ (`cpp`, `c++`, `cc`, `cxx`, `h`, `hpp`), C# (`csharp`, `cs`, `c#`), Java, Go (`go`, `golang`), Rust (`rust`, `rs`), Swift, and Kotlin (`kotlin`, `kt`, `kts`)
+- Visual Basic (`vb`, `visual-basic`, `visualbasic`, `vbnet`, `vb.net`), Delphi/Object Pascal (`pascal`, `delphi`, `object-pascal`, `objectpascal`), Ada (`ada`, `adb`, `ads`), Fortran (`fortran`, `f77`, `f90`, `f95`, `f03`), and COBOL (`cobol`, `cob`)
+- Shell (`shell`, `sh`, `bash`, `zsh`), PowerShell (`powershell`, `ps1`, `pwsh`), Perl (`perl`, `pl`), Ruby (`ruby`, `rb`), PHP, Lua, SQL (`sql`, `mysql`, `postgres`, `postgresql`, `sqlite`), SAS, and Assembly (`assembly`, `asm`, `nasm`, `gas`)
+- Textual LabVIEW/G snippets (`labview`, `lv`, `g`); graphical or binary `.vi` files are not source text and cannot be highlighted in a code fence
 
 - `linenums` — show line numbers from 1.
 - `linenums=N` or `line-start=N` — line numbers from N.

@@ -22,7 +22,7 @@
 
 # {{style:offset=0px, 100px|Single spin asymmetry of Drell Yan production in $p + \vec{p}$ collision @$\sqrt{510}$ GeV at STAR}}
 
-@author {{style:size=38px|M.H Zhao}}
+@author {{style:size=38px|Minghui Zhao}}
 
 {{style:size=28px|Iowa State University}}
 
@@ -30,7 +30,7 @@
 :::notes
 [Timing: 0:00–0:50]
 
-Good afternoon. I am M.H Zhao. Today I will present my measurement of the forward Drell–Yan transverse single-spin asymmetry in transversely polarized proton–proton collisions at STAR at a center-of-mass energy of 510 GeV.
+Good afternoon. I am Minghui Zhao. Today I will present my measurement of the forward Drell–Yan transverse single-spin asymmetry in transversely polarized proton–proton collisions at STAR at a center-of-mass energy of 510 GeV.
 
 The analysis asks whether the measured asymmetry is sensitive to the process dependence of transverse parton motion, especially the predicted Sivers sign change. Reaching that physics result requires three experimental steps: calibrating the forward detectors, validating the dielectron reconstruction with the nearby J/psi resonance, and suppressing the much larger QCD background in the Drell–Yan mass region.
 

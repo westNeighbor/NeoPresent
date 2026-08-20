@@ -50,6 +50,9 @@ export function parseMarkdown(source: string, options: ParseMarkdownOptions = {}
     footerShadowDistance,
     footerShadowOffset,
     footerShadowBlur,
+    footerShadowCurve,
+    footerShadowSize,
+    footerShadowPerspective,
     logo,
     logoOffset,
     pageNumber,
@@ -63,7 +66,9 @@ export function parseMarkdown(source: string, options: ParseMarkdownOptions = {}
     aspect,
     themeOptions,
     fonts,
-    headingDefaults
+    headingDefaults,
+    shadowDefaults,
+    glassDefaults
   } = extractPresentationDirectives(source);
   const registry = options.registry ?? createPluginRegistry(...(options.plugins ?? []));
   const sourceSlides = splitSlides(sourceWithoutDirectives);
@@ -150,6 +155,30 @@ export function parseMarkdown(source: string, options: ParseMarkdownOptions = {}
         ...(slide.getAttribute('headingOffset') || headingDefaults.offset
           ? { headingOffset: slide.getAttribute('headingOffset') || headingDefaults.offset }
           : {}),
+        ...(slide.getAttribute('headingPanelWidth') || headingDefaults.panelWidth
+          ? {
+              headingPanelWidth:
+                slide.getAttribute('headingPanelWidth') || headingDefaults.panelWidth
+            }
+          : {}),
+        ...(slide.getAttribute('headingPanelMaxWidth') || headingDefaults.panelMaxWidth
+          ? {
+              headingPanelMaxWidth:
+                slide.getAttribute('headingPanelMaxWidth') || headingDefaults.panelMaxWidth
+            }
+          : {}),
+        ...(slide.getAttribute('headingPanelPadding') || headingDefaults.panelPadding
+          ? {
+              headingPanelPadding:
+                slide.getAttribute('headingPanelPadding') || headingDefaults.panelPadding
+            }
+          : {}),
+        ...(Object.values(shadowDefaults).some((style) => Object.keys(style).length > 0)
+          ? { deckShadowDefaults: shadowDefaults }
+          : {}),
+        ...(Object.values(glassDefaults).some((style) => Object.keys(style).length > 0)
+          ? { deckGlassDefaults: glassDefaults }
+          : {}),
         ...(aspect && !slide.getAttribute('aspect') ? { aspect } : {}),
         ...(slideIndex === titleSlideSourceIndex ? { titleSlide: true } : {})
       }
@@ -221,6 +250,9 @@ export function parseMarkdown(source: string, options: ParseMarkdownOptions = {}
       footerShadowDistance,
       footerShadowOffset,
       footerShadowBlur,
+      footerShadowCurve,
+      footerShadowSize,
+      footerShadowPerspective,
       logo,
       logoOffset,
       pageNumber,
@@ -276,6 +308,9 @@ function extractPresentationDirectives(source: string): {
   footerShadowDistance: string;
   footerShadowOffset: string;
   footerShadowBlur: string;
+  footerShadowCurve: string;
+  footerShadowSize: string;
+  footerShadowPerspective: string;
   logo: string;
   logoOffset: string;
   pageNumber: boolean;
@@ -301,7 +336,16 @@ function extractPresentationDirectives(source: string): {
     listFont: string;
     quoteFont: string;
   };
-  headingDefaults: { position: string; align: string; offset: string };
+  headingDefaults: {
+    position: string;
+    align: string;
+    offset: string;
+    panelWidth: string;
+    panelMaxWidth: string;
+    panelPadding: string;
+  };
+  shadowDefaults: Record<string, Record<string, string>>;
+  glassDefaults: Record<string, Record<string, string>>;
 } {
   let theme = 'default';
   let controls: 'hidden' | 'visible' = 'hidden';
@@ -323,6 +367,9 @@ function extractPresentationDirectives(source: string): {
   let footerShadowDistance = '';
   let footerShadowOffset = '';
   let footerShadowBlur = '';
+  let footerShadowCurve = '';
+  let footerShadowSize = '';
+  let footerShadowPerspective = '';
   let logo = '';
   let logoOffset = '';
   let pageNumber = false;
@@ -342,7 +389,35 @@ function extractPresentationDirectives(source: string): {
     cimentHatchDensity: '12'
   };
   const fonts = { font: '', bodyFont: '', headingFont: '', listFont: '', quoteFont: '' };
-  const headingDefaults = { position: '', align: '', offset: '' };
+  const headingDefaults = {
+    position: '',
+    align: '',
+    offset: '',
+    panelWidth: '',
+    panelMaxWidth: '',
+    panelPadding: ''
+  };
+  const shadowDefaults: Record<string, Record<string, string>> = {
+    block: {},
+    heading: {},
+    plot: {},
+    image: {},
+    pdf: {},
+    table: {},
+    code: {},
+    quote: {}
+  };
+  const glassDefaults: Record<string, Record<string, string>> = {
+    block: {},
+    heading: {},
+    plot: {},
+    image: {},
+    pdf: {},
+    table: {},
+    code: {},
+    quote: {},
+    footer: {}
+  };
   const lines = source.split(/\r?\n/);
   let inDeckPreamble = true;
   for (let index = 0; index < lines.length && inDeckPreamble; index += 1) {
@@ -366,12 +441,15 @@ function extractPresentationDirectives(source: string): {
       continue;
     }
     const headingDirective = line.match(
-      /^@(heading-position|heading-align|heading-offset)\s+(.+?)\s*$/i
+      /^@(heading-position|heading-align|heading-offset|heading-panel-width|heading-panel-max-width|heading-panel-padding)\s+(.+?)\s*$/i
     );
     if (headingDirective) {
       const key = headingDirective[1]!
         .toLowerCase()
-        .replace('heading-', '') as keyof typeof headingDefaults;
+        .replace('heading-', '')
+        .replace('panel-width', 'panelWidth')
+        .replace('panel-max-width', 'panelMaxWidth')
+        .replace('panel-padding', 'panelPadding') as keyof typeof headingDefaults;
       headingDefaults[key] = headingDirective[2]!.trim().toLowerCase();
       lines[index] = '';
       continue;
@@ -382,8 +460,24 @@ function extractPresentationDirectives(source: string): {
   const sourceWithoutDirectives = lines
     .join('\n')
     .replace(
-      /^@(theme|fyma-(?:palette|gradient-direction)|ciment-hatch-(?:color|alpha|density)|controls|autoplay|author|footer-shadow(?:-(?:color|opacity|angle|distance|offset|blur))?|footer-(?:left|center|right)-font|footer-font|footer-size|footer-offset|footer(?:-(?:left|center|right))?|logo-offset|logo|page-number-position|page-number-offset|page-number-size|page-number|page-total-notoc|page-total|progress|subtitle)\s+(.+?)\s*$/gim,
+      /^@((?:block|heading|plot|image|pdf|table|code|quote)-shadow(?:-(?:color|opacity|angle|distance|offset|blur|curve|size|perspective))?|(?:block|heading|plot|image|pdf|table|code|quote|footer)-glass(?:-(?:color|alpha|transparency|blur|saturation|thickness|edge-color|edge-alpha|depth|depth-alpha|radius))?|theme|fyma-(?:palette|gradient-direction)|ciment-hatch-(?:color|alpha|density)|controls|autoplay|author|footer-shadow(?:-(?:color|opacity|angle|distance|offset|blur|curve|size|perspective))?|footer-(?:left|center|right)-font|footer-font|footer-size|footer-offset|footer(?:-(?:left|center|right))?|logo-offset|logo|page-number-position|page-number-offset|page-number-size|page-number|page-total-notoc|page-total|progress|subtitle)\s+(.+?)\s*$/gim,
       (_match, directive: string, value: string) => {
+        const shadowDirective = directive
+          .toLowerCase()
+          .match(/^(block|heading|plot|image|pdf|table|code|quote)-shadow(?:-(color|opacity|angle|distance|offset|blur|curve|size|perspective))?$/);
+        if (shadowDirective) {
+          const target = shadowDirective[1]!;
+          const property = shadowDirective[2] ? `shadow-${shadowDirective[2]}` : 'shadow';
+          shadowDefaults[target]![property] = value;
+        }
+        const glassDirective = directive
+          .toLowerCase()
+          .match(/^(block|heading|plot|image|pdf|table|code|quote|footer)-glass(?:-(color|alpha|transparency|blur|saturation|thickness|edge-color|edge-alpha|depth|depth-alpha|radius))?$/);
+        if (glassDirective) {
+          const target = glassDirective[1]!;
+          const property = glassDirective[2] ? `glass-${glassDirective[2]}` : 'glass';
+          glassDefaults[target]![property] = value;
+        }
         if (directive.toLowerCase() === 'theme') theme = value;
         if (directive.toLowerCase() === 'fyma-palette') themeOptions.fymaPalette = value;
         if (directive.toLowerCase() === 'fyma-gradient-direction')
@@ -417,6 +511,10 @@ function extractPresentationDirectives(source: string): {
         if (directive.toLowerCase() === 'footer-shadow-distance') footerShadowDistance = value;
         if (directive.toLowerCase() === 'footer-shadow-offset') footerShadowOffset = value;
         if (directive.toLowerCase() === 'footer-shadow-blur') footerShadowBlur = value;
+        if (directive.toLowerCase() === 'footer-shadow-curve') footerShadowCurve = value;
+        if (directive.toLowerCase() === 'footer-shadow-size') footerShadowSize = value;
+        if (directive.toLowerCase() === 'footer-shadow-perspective')
+          footerShadowPerspective = value;
         if (directive.toLowerCase() === 'logo') logo = value;
         if (directive.toLowerCase() === 'logo-offset') logoOffset = value;
         if (directive.toLowerCase() === 'page-number')
@@ -458,6 +556,9 @@ function extractPresentationDirectives(source: string): {
     footerShadowDistance,
     footerShadowOffset,
     footerShadowBlur,
+    footerShadowCurve,
+    footerShadowSize,
+    footerShadowPerspective,
     logo,
     logoOffset,
     pageNumber,
@@ -471,7 +572,9 @@ function extractPresentationDirectives(source: string): {
     aspect,
     themeOptions,
     fonts,
-    headingDefaults
+    headingDefaults,
+    shadowDefaults,
+    glassDefaults
   };
 }
 
@@ -795,7 +898,9 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
       continue;
     }
 
-    const blockEnterDirective = line.match(/^@block-enter(?:\s+(fade|grow|rise|zoom))?\s*$/i);
+    const blockEnterDirective = line.match(
+      /^@block-enter(?:\s+(fade|grow|rise|zoom|morph))?\s*$/i
+    );
     if (blockEnterDirective) {
       flushParagraph();
       pendingBlockTransition.blockEnter = (blockEnterDirective[1] ?? 'fade').toLowerCase();
@@ -836,7 +941,7 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
     }
 
     const blockStyleDirective = line.match(
-      /^@(scale|offset|fill|fill-alpha|frame-color|glass|glass-color|glass-alpha|glass-transparency|glass-blur|glass-saturation|glass-thickness|glass-edge-color|glass-edge-alpha|glass-depth|glass-depth-alpha|glass-radius|border|border-style|border-color|border-alpha|border-size|border-radius|border-padding|frame-inner-color|frame-scale|shadow|shadow-color|shadow-opacity|shadow-angle|shadow-distance|shadow-offset|shadow-blur|shadow-curve|shadow-size|reflection|sticky-width|sticky-rotation|sticky-fill|sticky-alpha|sticky-tape|sticky-tape-alpha|sticky-position)\s+(.+?)\s*$/i
+      /^@(scale|offset|fill|fill-alpha|frame-color|glass|glass-color|glass-alpha|glass-transparency|glass-blur|glass-saturation|glass-thickness|glass-edge-color|glass-edge-alpha|glass-depth|glass-depth-alpha|glass-radius|border|border-style|border-color|border-alpha|border-size|border-radius|border-padding|frame-inner-color|frame-scale|shadow|shadow-color|shadow-opacity|shadow-angle|shadow-distance|shadow-offset|shadow-blur|shadow-curve|shadow-size|shadow-perspective|reflection|sticky-width|sticky-rotation|sticky-fill|sticky-alpha|sticky-tape|sticky-tape-alpha|sticky-position)\s+(.+?)\s*$/i
     );
     if (blockStyleDirective) {
       flushParagraph();
@@ -939,6 +1044,10 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
           'font',
           'headingAlign',
           'headingFont',
+          'headingOffset',
+          'headingPanelWidth',
+          'headingPanelMaxWidth',
+          'headingPanelPadding',
           'listFont',
           'quoteFont'
         ].flatMap((name) =>
@@ -1023,6 +1132,10 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
                   'font',
                   'headingAlign',
                   'headingFont',
+                  'headingOffset',
+                  'headingPanelWidth',
+                  'headingPanelMaxWidth',
+                  'headingPanelPadding',
                   'listFont',
                   'quoteFont'
                 ].flatMap((name) =>
@@ -1179,7 +1292,7 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
     }
 
     const directive = line.match(
-      /^@(align|body-align|aspect|background|background-overlay|background-position|background-size|section|slide-theme|transition|transition-duration|duration|valign|font|body-font|heading-font|heading-position|heading-align|heading-offset|list-font|quote-font)\s+(.+?)\s*$/i
+      /^@(align|body-align|aspect|background|background-overlay|background-position|background-size|section|slide-theme|transition|transition-duration|duration|valign|font|body-font|heading-font|heading-position|heading-align|heading-offset|heading-panel-width|heading-panel-max-width|heading-panel-padding|list-font|quote-font)\s+(.+?)\s*$/i
     );
     if (directive) {
       flushParagraph();
@@ -1210,6 +1323,12 @@ function parseSlide(source: string, registry: PluginRegistry): Slide {
                               ? 'headingAlign'
                               : name === 'heading-offset'
                                 ? 'headingOffset'
+                                : name === 'heading-panel-width'
+                                  ? 'headingPanelWidth'
+                                  : name === 'heading-panel-max-width'
+                                    ? 'headingPanelMaxWidth'
+                                    : name === 'heading-panel-padding'
+                                      ? 'headingPanelPadding'
                                 : name === 'list-font'
                                   ? 'listFont'
                                   : name === 'quote-font'
@@ -1455,11 +1574,19 @@ function createChart(source: string): Chart {
     .filter((value) => value.trim() !== '')
     .map((value) => Number(value.trim()))
     .filter((value) => !Number.isNaN(value));
-  const labels = values.labels
+  const explicitLabels = values.labels
     ?.split(',')
     .map((label) => label.trim())
     .filter(Boolean);
   let xValues = parseNumberList(values.x);
+  const categoricalXLabels =
+    !xValues && values.x?.includes(',')
+      ? values.x
+          .split(',')
+          .map((label) => label.trim())
+          .filter(Boolean)
+      : undefined;
+  const labels = explicitLabels ?? categoricalXLabels;
   let yValues = parseNumberList(values.y);
   const errorValues = parseNumberList(values.error);
   const errorLowValues = parseNumberList(values['error-low']);
@@ -1498,6 +1625,8 @@ function createChart(source: string): Chart {
     'plot-height',
     'chart-width',
     'chart-height',
+    'chart-padding',
+    'chart-trim',
     'axis-color',
     'axis-width',
     'axis-alpha',
@@ -1843,6 +1972,9 @@ function createChart(source: string): Chart {
     'trendline-label',
     'animation',
     'animation-trigger',
+    'morph-match',
+    'morph-axis',
+    'morph-text',
     'export-stages',
     'reveal-stages',
     'reveal-stage-default',
@@ -2309,7 +2441,7 @@ function createChart(source: string): Chart {
     values: numbers,
     ...(labels ? { labels } : {}),
     ...(values.source ? { source: values.source } : {}),
-    ...(values.x && !xValues ? { xField: values.x } : {}),
+    ...(values.x && !xValues && !categoricalXLabels ? { xField: values.x } : {}),
     ...(values.y ? { yField: values.y } : {}),
     ...((values.xlabel ?? values['x-label']) ? { xLabel: values.xlabel ?? values['x-label'] } : {}),
     ...((values.ylabel ?? values['y-label']) ? { yLabel: values.ylabel ?? values['y-label'] } : {}),

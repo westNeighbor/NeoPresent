@@ -48,7 +48,10 @@ export function createViewport(
     shadowAngle: deck.getAttribute?.('footerShadowAngle') ?? '',
     shadowDistance: deck.getAttribute?.('footerShadowDistance') ?? '',
     shadowOffset: deck.getAttribute?.('footerShadowOffset') ?? '',
-    shadowBlur: deck.getAttribute?.('footerShadowBlur') ?? ''
+    shadowBlur: deck.getAttribute?.('footerShadowBlur') ?? '',
+    shadowCurve: deck.getAttribute?.('footerShadowCurve') ?? '',
+    shadowSize: deck.getAttribute?.('footerShadowSize') ?? '',
+    shadowPerspective: deck.getAttribute?.('footerShadowPerspective') ?? ''
   };
   const logo = deck.getAttribute?.('logo') ?? '';
   const logoOffset = deck.getAttribute?.('logoOffset') ?? '0,0';
@@ -130,7 +133,13 @@ export function createViewport(
   let filmstripComponent;
   let liveStyleRevision = 0;
   let liveStyleUpdate = Promise.resolve();
-  const serializePresenterSlide = (slide, index, revealIndex, animate = false) => {
+  const serializePresenterSlide = (
+    slide,
+    index,
+    revealIndex,
+    animate = false,
+    revealDirection = 'forward'
+  ) => {
     if (!slide) return null;
     const slideTheme = getSlideTheme(slide);
     return {
@@ -160,7 +169,9 @@ export function createViewport(
         getProgress(index),
         logoOffset,
         getPageNumber(index),
-        liveAspect
+        liveAspect,
+        false,
+        revealDirection
       )
     };
   };
@@ -243,7 +254,8 @@ export function createViewport(
         activeSlide,
         state.activeIndex,
         state.revealIndex,
-        true
+        true,
+        state.revealDirection
       ),
       currentTitle: activeSlide ? getSlideTitle(activeSlide) : '',
       notes: activeSlide?.notes ?? '',
@@ -717,6 +729,7 @@ export function createViewport(
         activeIndex: 0,
         elapsedSeconds: 0,
         revealIndex: 0,
+        revealDirection: 'forward',
         controlsVisible: !controlsHiddenByDefault,
         maxIndex: Math.max(deck.children.length - 1, 0),
         notesOpen: false,
@@ -1334,6 +1347,7 @@ export function createViewport(
       if (currentReveal >= revealCount) return false;
 
       state.revealIndex = currentReveal + 1;
+      state.revealDirection = 'forward';
       slideRevealIndexes.set(state.activeIndex, state.revealIndex);
       this.refreshActiveSlide(true);
       publishPresenterState();
@@ -1351,8 +1365,9 @@ export function createViewport(
       if (currentReveal === 0) return false;
 
       state.revealIndex = currentReveal - 1;
+      state.revealDirection = 'backward';
       slideRevealIndexes.set(state.activeIndex, state.revealIndex);
-      this.refreshActiveSlide();
+      this.refreshActiveSlide(true);
       publishPresenterState();
       return true;
     }
@@ -1393,7 +1408,8 @@ export function createViewport(
           logoOffset,
           getPageNumber(state.activeIndex),
           liveAspect,
-          exportSnapshot
+          exportSnapshot,
+          state.revealDirection
         );
         slideComponent.updateVdom();
       }
@@ -2019,6 +2035,11 @@ function serializeSlide(
     headingPosition: slide.getAttribute?.('headingPosition') ?? 'flow',
     headingAlign: slide.getAttribute?.('headingAlign') ?? slide.getAttribute?.('align') ?? 'center',
     headingOffset: slide.getAttribute?.('headingOffset') ?? '0,0',
+    headingPanelWidth: slide.getAttribute?.('headingPanelWidth') ?? '',
+    headingPanelMaxWidth: slide.getAttribute?.('headingPanelMaxWidth') ?? '',
+    headingPanelPadding: slide.getAttribute?.('headingPanelPadding') ?? '',
+    deckShadowDefaults: slide.getAttribute?.('deckShadowDefaults') ?? {},
+    deckGlassDefaults: slide.getAttribute?.('deckGlassDefaults') ?? {},
     listFont: slide.getAttribute?.('listFont') ?? '',
     quoteFont: slide.getAttribute?.('quoteFont') ?? '',
     align: slide.getAttribute?.('align') ?? 'center',

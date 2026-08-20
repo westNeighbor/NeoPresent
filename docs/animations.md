@@ -146,7 +146,83 @@ y: 2,5,3
 ![Replacement figure](assets/final-result.png)
 ````
 
-`replace` collapses the old block’s layout height as it disappears. `shrink 35%` preserves the block but scales it to the requested percentage.
+`replace` overlays the outgoing and incoming blocks in the same centered layout
+cell, then collapses the old block as it disappears. This keeps `fade`, `grow`,
+`rise`, `zoom`, and `morph` replacements in place even when the two blocks have
+different natural dimensions. `shrink 35%` preserves the block but scales it to
+the requested percentage.
+
+### Morph between plots without a layout jump
+
+Use `morph` on the incoming block together with `replace` on the outgoing
+block. Compatible line plots keep their frame, axes, ticks, labels, and legend
+stationary while NeoPresent interpolates the line geometry:
+
+````markdown
+@block-transition-trigger reveal
+@block-exit replace
+```plot
+type: line
+x: A, B, C
+y: 12, 20, 16
+y-min: 10
+y-max: 30
+```
+
+@block-enter morph
+@block-exit replace
+@block-transition-duration 900ms
+```plot
+type: line
+x: A, B, C
+y: 16, 14, 24
+y-min: 10
+y-max: 30
+```
+````
+
+For true line interpolation, both blocks must be line plots with matching
+categories or X coordinates, plot dimensions, scales, and explicit matching
+`y-min`/`y-max` ranges. When SVG marks cannot be paired safely, `morph` uses the
+centered whole-block fallback instead. Reveal navigation is bidirectional:
+Right/Next morphs from the earlier plot to the later plot, and Left/Previous
+interpolates the same geometry in reverse.
+
+Morph matching is semantic. `morph-match: auto` (the default) prefers matching
+X values, then category keys, then point index. This allows a numeric axis such
+as `x: 1, 2, 3` to morph into the corresponding categorical axis
+`x: A, B, C` when both contain the same number of points: data geometry morphs
+by index, while the old tick labels fade out and the new labels fade in.
+
+Use `morph-match: index`, `x`, or `key` to select a strategy explicitly.
+`morph-axis: false` requires identical axes and disables semantic axis changes.
+`morph-text: none` changes tick text immediately instead of crossfading it.
+
+Matching point markers also move between their old and new coordinates. Use
+`draw: LP` (or `draw: PL`) for a line with moving points, or `draw: P` for
+moving points without a connecting line. Point shapes and draw modes should
+match between the two plots.
+
+The same semantic geometry engine supports these compatible replacements:
+
+- line, area, and scatter plots;
+- bar and grouped-bar plots;
+- histograms with matching bins;
+- pie and donut plots with matching slice keys;
+- radar plots with matching series/categories;
+- polar-function plots with matching sample structure.
+
+Sampled `function:` overlays and fitted curves participate in the same morph.
+Function overlays are matched by their label (or their declaration order when
+unlabelled); fits are matched by `fit-id`. Matching fit confidence/prediction
+bands interpolate with the curve, while changed `fit-results` and `fit-quality`
+text crossfades. Keep the axes and sampling structure compatible, and assign an
+explicit stable `fit-id` when a plot contains multiple fits.
+
+It interpolates paths, bar rectangles, point coordinates, arc geometry, radar
+polygons, and polar polylines. Added or removed unmatched structures use the
+centered fallback. Sankey/alluvial, heatmap, box/violin, contour, and 3D surface
+plots currently retain the whole-block fallback.
 
 Block transitions run automatically by default. To make them wait for a navigation step, add this slide-level directive:
 
@@ -154,7 +230,7 @@ Block transitions run automatically by default. To make them wait for a navigati
 @block-transition-trigger reveal
 ```
 
-Enter effects are `fade`, `grow`, `zoom`, and `rise`. Exit effects are `shrink <percentage>` and `replace`. Use `@block-transition-delay` for an intentional pause.
+Enter effects are `fade`, `grow`, `zoom`, `rise`, and `morph`. Exit effects are `shrink <percentage>` and `replace`. Use `@block-transition-delay` for an intentional pause.
 
 ### Replace complete multi-column states
 

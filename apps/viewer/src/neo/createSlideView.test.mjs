@@ -3,6 +3,38 @@ import { parseMarkdown } from '@neopresent/markdown';
 
 import { createScientificChartMarkup, createSlideVdom } from './createSlideView.mjs';
 
+describe('code block alignment', () => {
+  it('preserves source indentation on center-aligned slides', () => {
+    const deck = parseMarkdown(`@align center
+
+\`\`\`rust linenums
+fn main() {
+    println!("Hello from Rust");
+}
+\`\`\``);
+    const theme = {
+      accent: '#1a734d',
+      background: '#ffffff',
+      border: '#3db373',
+      codeComment: '#64748b',
+      codeKeyword: '#1d4ed8',
+      codeNumber: '#ff0000',
+      codeString: '#9f1239',
+      foreground: '#1a734d',
+      muted: '#4b5563',
+      panel: '#ffffff',
+      surface: '#e0ffe6'
+    };
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, Infinity, false);
+    const block = vdom.cn.find((child) => child?.tag === 'pre');
+    const code = block?.cn?.find((child) => child?.tag === 'code');
+
+    expect(block?.style?.textAlign).toBe('left');
+    expect(code?.style?.textAlign).toBe('left');
+    expect(code?.style?.whiteSpace).toBe('pre');
+  });
+});
+
 describe('styled inline footer content', () => {
   it('renders LaTeX inside an inline style span', () => {
     const theme = {
@@ -49,6 +81,226 @@ describe('slide transitions', () => {
     const vdom = createSlideVdom(slide, theme, false, false, Infinity, true);
 
     expect(vdom.style.animation).toContain('neopresent-fade-in');
+  });
+
+  it.each(['fade', 'grow', 'rise', 'zoom', 'morph'])(
+    'overlays %s replacement plots in one centered grid cell',
+    (enterEffect) => {
+      const deck = parseMarkdown(`@block-transition-trigger reveal
+@block-exit replace
+
+\`\`\`plot
+type: bar
+x: A, B
+y: 1, 2
+\`\`\`
+
+@block-enter ${enterEffect}
+
+\`\`\`plot
+type: line
+x: A, B
+y: 2, 1
+\`\`\``);
+      const vdom = createSlideVdom(deck.children[0], theme, false, false, 1, true);
+      const replacementHost = vdom.cn.find(
+        (child) => child?.data?.neopresentReplacementHost === 'true'
+      );
+
+      expect(replacementHost?.style?.display).toBe('grid');
+      expect(replacementHost?.cn).toHaveLength(2);
+      expect(replacementHost?.cn?.[0]?.style?.gridArea).toBe('1 / 1');
+      expect(replacementHost?.cn?.[1]?.style?.gridArea).toBe('1 / 1');
+      expect(replacementHost?.cn?.[0]?.style?.justifySelf).toBe('center');
+      expect(replacementHost?.cn?.[1]?.style?.justifySelf).toBe('center');
+    }
+  );
+
+  it('interpolates only line marks for compatible morph plots', () => {
+    const deck = parseMarkdown(`@block-transition-trigger reveal
+@block-exit replace
+
+\`\`\`plot
+type: line
+x: A, B, C
+y: 12, 20, 16
+draw: LP
+y-min: 10
+y-max: 30
+\`\`\`
+
+@block-enter morph
+@block-transition-duration 900ms
+
+\`\`\`plot
+type: line
+x: A, B, C
+y: 16, 14, 24
+draw: LP
+y-min: 10
+y-max: 30
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, 1, true);
+    const replacementHost = vdom.cn.find(
+      (child) => child?.data?.neopresentReplacementHost === 'true'
+    );
+    const [outgoing, incoming] = replacementHost.cn;
+
+    expect(outgoing.style.opacity).toBe(0);
+    expect(outgoing.style.animation).toBeUndefined();
+    expect(incoming.style.opacity).toBe(1);
+    expect(incoming.style.animation).toBeUndefined();
+    const incomingMarkup = JSON.stringify(incoming);
+    expect(incomingMarkup).toContain('data-neopresent-morph-id=');
+    expect(incomingMarkup).toContain('@keyframes np-line-morph-');
+    expect(incomingMarkup).toContain('data-neopresent-series-point');
+    expect(incomingMarkup).toContain('-point-0-0');
+    expect(incomingMarkup).toMatch(/transform:translate\(-?\d+(?:\.\d+)?px,-?\d+(?:\.\d+)?px\)/);
+    expect(incomingMarkup).toContain('900ms cubic-bezier(.2,.8,.2,1)');
+  });
+
+  it('reverses compatible line morph geometry on a backward reveal step', () => {
+    const deck = parseMarkdown(`@block-transition-trigger reveal
+@block-exit replace
+\`\`\`plot
+type: line
+x: A, B, C
+y: 12, 20, 16
+y-min: 10
+y-max: 30
+\`\`\`
+@block-enter morph
+@block-transition-duration 900ms
+\`\`\`plot
+type: line
+x: A, B, C
+y: 16, 14, 24
+y-min: 10
+y-max: 30
+\`\`\``);
+    const vdom = createSlideVdom(
+      deck.children[0],
+      theme,
+      false,
+      false,
+      0,
+      true,
+      {},
+      '',
+      null,
+      '0,0',
+      null,
+      '',
+      false,
+      'backward'
+    );
+    const replacementHost = vdom.cn.find(
+      (child) => child?.data?.neopresentReplacementHost === 'true'
+    );
+    const [earlier, later] = replacementHost.cn;
+
+    expect(earlier.style.opacity).toBe(1);
+    expect(later.style.opacity).toBe(0);
+    expect(JSON.stringify(earlier)).toContain('@keyframes np-line-morph-');
+  });
+
+  it('semantically morphs numeric ticks into categorical ticks by index', () => {
+    const deck = parseMarkdown(`@block-transition-trigger reveal
+@block-exit replace
+\`\`\`plot
+type: line
+x: 1, 2, 3
+y: 12, 20, 16
+y-min: 10
+y-max: 30
+\`\`\`
+@block-enter morph
+@block-transition-duration 900ms
+\`\`\`plot
+type: line
+x: A, B, C
+y: 16, 14, 24
+y-min: 10
+y-max: 30
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, 1, true);
+    const replacementHost = vdom.cn.find(
+      (child) => child?.data?.neopresentReplacementHost === 'true'
+    );
+    const markup = JSON.stringify(replacementHost);
+
+    expect(markup).toContain('from{d:path');
+    expect(markup).toContain('data-neopresent-morph-source-tick');
+    expect(markup).toContain('-tick-in');
+    expect(markup).toContain('-tick-out');
+  });
+
+  it.each([
+    ['bar', 'y-min: 0\ny-max: 4', 'attributeName=\\"height'],
+    ['pie', 'labels: A, B, C', 'attributeName=\\"d'],
+    ['radar', 'labels: A, B, C\nradar-max: 100', 'attributeName=\\"points']
+  ])('morphs compatible %s mark geometry', (type, settings, expected) => {
+    const deck = parseMarkdown(`@block-transition-trigger reveal
+@block-exit replace
+\`\`\`plot
+type: ${type}
+values: 1, 2, 3
+${settings}
+\`\`\`
+@block-enter morph
+\`\`\`plot
+type: ${type}
+values: 3, 1, 2
+${settings}
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, 1, true);
+    const replacementHost = vdom.cn.find(
+      (child) => child?.data?.neopresentReplacementHost === 'true'
+    );
+
+    expect(JSON.stringify(replacementHost)).toContain(expected);
+    expect(replacementHost.cn[0].style.animation).toBeUndefined();
+    expect(replacementHost.cn[1].style.animation).toBeUndefined();
+  });
+
+  it('morphs sampled functions and fitted curves while crossfading fit text', () => {
+    const deck = parseMarkdown(`@block-transition-trigger reveal
+@block-exit replace
+\`\`\`plot
+type: line
+x: 1, 2, 3, 4
+y: 2, 4, 7, 11
+y-min: 0
+y-max: 20
+function: x*x | label: Model
+fit: a + b*x
+fit-id: trend
+fit-params: a=0, b=1
+fit-results: true
+\`\`\`
+@block-enter morph
+\`\`\`plot
+type: line
+x: 1, 2, 3, 4
+y: 3, 6, 10, 15
+y-min: 0
+y-max: 20
+function: x*x + 2 | label: Model
+fit: a + b*x
+fit-id: trend
+fit-params: a=0, b=1
+fit-results: true
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, 1, true);
+    const replacementHost = vdom.cn.find(
+      (child) => child?.data?.neopresentReplacementHost === 'true'
+    );
+    const markup = JSON.stringify(replacementHost);
+
+    expect(markup).toContain('data-neopresent-series-line=\\\"function:Model');
+    expect(markup).toContain('data-neopresent-series-line=\\\"fit:trend');
+    expect(markup).toContain('data-neopresent-morph-source-fit-text');
+    expect(markup).toContain('-fit-text-in');
   });
 });
 
@@ -490,6 +742,39 @@ describe('grouped bar charts', () => {
     expect(markup).toContain('neopresent-chart-grow');
   });
 
+  it('wraps the default chart width instead of stretching block effects across the slide', () => {
+    const deck = parseMarkdown(`@block-glass on
+
+\`\`\`plot
+type: bar
+labels: 2022, 2023
+series: A | values: 10,12
+series: B | values: 7,8
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, Infinity, false);
+    const chartNode = vdom.cn.find(
+      (child) => child?.tag === 'div' && JSON.stringify(child).includes('aria-label')
+    );
+
+    expect(chartNode?.style?.width).toBe('min(100%, 845px)');
+    expect(chartNode?.style?.background).toContain('linear-gradient');
+  });
+
+  it('keeps an explicit full chart width', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: bar
+labels: 2022
+values: 10
+chart-width: 100%
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, Infinity, false);
+    const chartNode = vdom.cn.find(
+      (child) => child?.tag === 'div' && JSON.stringify(child).includes('aria-label')
+    );
+
+    expect(chartNode?.style?.width).toBe('100%');
+  });
+
   it('adds ten percent automatic headroom while respecting an explicit y maximum', () => {
     const chart = {
       id: 'headroom',
@@ -527,6 +812,50 @@ describe('radar charts', () => {
     panel: '#0f172a',
     surface: '#1e293b'
   };
+
+  it('trims unused horizontal canvas and keeps the outer block tight', () => {
+    const deck = parseMarkdown(`@block-glass on
+
+\`\`\`plot
+type: radar
+labels: A, B, C
+values: 2, 3, 4
+chart-padding: 10px 16px
+chart-trim: 0 80 0 80
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, Infinity, false);
+    const chartNode = vdom.cn.find(
+      (child) => child?.tag === 'div' && JSON.stringify(child).includes('aria-label')
+    );
+    const serialized = JSON.stringify(chartNode);
+
+    expect(chartNode?.style?.width).toBe('min(100%, 685px)');
+    expect(chartNode?.style?.padding).toBe('10px 16px');
+    expect(serialized).toContain('viewBox=\"80 0 685 500\"');
+  });
+
+  it('trims the root wrapper used by polar-function plots', () => {
+    const deck = parseMarkdown(`@block-glass on
+
+\`\`\`plot
+type: polar-function
+title: Five-petal rose
+function: 3*cos(5*theta)
+theta-min: 0
+theta-max: 2*pi
+theta-samples: 720
+chart-trim: 0 180 0 180
+chart-padding: 8px
+\`\`\``);
+    const vdom = createSlideVdom(deck.children[0], theme, false, false, Infinity, false);
+    const chartNode = vdom.cn.find(
+      (child) => child?.tag === undefined && typeof child?.html === 'string'
+    );
+
+    expect(chartNode?.style?.width).toBe('min(100%, 485px)');
+    expect(chartNode?.style?.padding).toBe('8px');
+    expect(chartNode?.html).toContain('viewBox="180 0 485 500"');
+  });
 
   it('renders multiple animated polygons with labels, legends, and point tooltips', () => {
     const markup = createScientificChartMarkup(

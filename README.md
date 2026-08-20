@@ -33,7 +33,7 @@ If you like the project, please give me a star! ⭐
 - **Interactive overview modes** — Navigate slides using filmstrip, grid, helix, and animated 3D gallery views.
 - **Native PDF support** — Embed PDF figures, inspect them in viewer mode, and preserve vector content during PDF export where possible.
 - **High-quality export** — Export complete presentations to PDF, optionally including speaker notes, animation steps, and annotations.
-- **Presentation annotations** — Draw directly on slides using multiple stroke styles, including a chalk-style pen, and export the results.
+- **Presentation annotations** — Draw directly on slides using multiple stroke styles, including a textured chalk pen, and export the styled results.
 - **Tables and external data** — Load CSV tables and JSON plot data, with styling, highlighting, mathematics, and animation controls.
 - **Scientific diagram blocks** — Create Feynman diagrams, Standard Model charts, periodic tables, and other structured visualizations directly in Markdown.
 - **Flexible layouts** — Arrange content using columns, groups, offsets, scaling, alignment, captions, and configurable slide dimensions.
@@ -42,9 +42,6 @@ If you like the project, please give me a star! ⭐
 - **Responsive rendering** — Slide contents scale proportionally with the slide canvas across viewer, presenter, windowed, and fullscreen modes.
 - **Local-first workflow** — Run presentations locally with a fast development server and use external assets without uploading the deck to a third-party service.
 - **Hover data value tips** — Hover data value tips for built-in plots.
-
-## Limitations
-- **Export annotations do not support storke styles due to PDF vector drawing limits, so the chalk stroke will be a solid line for export PDF annotations**
 
 ## Quick start
 
@@ -193,6 +190,21 @@ Press `H` or `?` in either window for theme-aware help. Viewer help changes auto
 The presenter additionally owns laser (`L`), spotlight (`S`), annotation (`A`), eraser (`E`), blank screen (`B`), search (`F`), bookmarks (`M`), and the liquid-glass magnifier (`Z`). See [Presenting and controls](docs/presenting.md) for the complete context-sensitive tables and PDF inspection controls.
 
 ## Release notes
+<details open>
+  <summary>v0.3.0</summary>
+  <div style="margin-left: 20px;margin-bottom: 10px;">
+    <ul>
+      <li><b>Richer visual system</b> — expanded glass themes, liquid-glass magnification, heading-panel controls, and deck-wide glass and shadow styling.</li>
+      <li><b>More expressive plot animation</b> — reversible in-place morphing for compatible data, axes, functions, and fitted curves.</li>
+      <li><b>Better plot layout control</b> — chart trim and padding controls plus legend-clipping fixes for donut, radar, and related charts.</li>
+      <li><b>Refined shadows</b> — distinct drop, contact, and curved effects with perspective and curvature controls.</li>
+      <li><b>Improved annotations</b> — a more natural textured chalk stroke shared by live presentation and export.</li>
+      <li><b>Broader code support</b> — syntax highlighting for major programming-language families with improved theme contrast and viewer indentation.</li>
+    </ul>
+    <p>See <a href="release_notes/v0.3.0.md">the complete v0.3.0 release notes</a> for details.</p>
+  </div>
+</details>
+
 <details>
   <summary>v0.1.0</summary>
   <!-- Bulk Build part -->

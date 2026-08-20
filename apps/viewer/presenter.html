@@ -180,6 +180,32 @@
           transform: translateY(0);
         }
       }
+      @keyframes neopresent-block-enter-morph {
+        from {
+          opacity: 0;
+          transform: translateZ(0) scale(.94);
+          filter: blur(10px);
+        }
+        45% { opacity: .72; }
+        to {
+          opacity: 1;
+          transform: translateZ(0) scale(1);
+          filter: blur(0);
+        }
+      }
+      @keyframes neopresent-block-morph-out {
+        from {
+          opacity: 1;
+          transform: translateZ(0) scale(1);
+          filter: blur(0);
+        }
+        55% { opacity: .28; }
+        to {
+          opacity: 0;
+          transform: translateZ(0) scale(1.06);
+          filter: blur(10px);
+        }
+      }
       @keyframes neopresent-block-shrink {
         from {
           opacity: 1;
@@ -2785,7 +2811,12 @@
             maskStroke.setAttribute('stroke-width', String(width * 1.08));
             mask.append(maskStroke);
             let grainIndex = 0;
-            const grainMarks = [];
+            const poreMarks = [];
+            const depositMarks = [[], [], []];
+            const chalkRandom = (seed) => {
+              const value = Math.sin((pathIndex + 1) * 91.731 + seed * 17.319) * 43758.5453;
+              return value - Math.floor(value);
+            };
             let totalLength = 0;
             for (let pointIndex = 1; pointIndex < path.points.length; pointIndex += 1) {
               totalLength += Math.hypot(
@@ -2793,9 +2824,11 @@
                 path.points[pointIndex].y - path.points[pointIndex - 1].y
               );
             }
-            const grainCount = Math.max(1, Math.min(1400, Math.ceil(totalLength / (width * 0.34))));
+            // Resample across the complete path. Seeded, nonuniform particles
+            // keep presenter, viewer, restored strokes, and exports identical.
+            const grainCount = Math.max(1, Math.min(2200, Math.ceil(totalLength / (width * 0.17))));
             const grainSpacing = totalLength / grainCount;
-            let nextGrainDistance = grainSpacing * 0.5;
+            let nextGrainDistance = grainSpacing * (0.18 + chalkRandom(1) * 0.5);
             let traversed = 0;
             for (let segmentIndex = 1; segmentIndex < path.points.length && grainIndex < grainCount; segmentIndex += 1) {
               const start = path.points[segmentIndex - 1];
@@ -2808,25 +2841,54 @@
               const normalY = dx / length;
               while (nextGrainDistance <= traversed + length && grainIndex < grainCount) {
                 const progress = (nextGrainDistance - traversed) / length;
-                const phase = (pathIndex + 1) * 2.173 + grainIndex * 1.619;
-                const across = Math.sin(phase * 1.31) * width * 0.4;
-                const along = Math.cos(phase * 2.17) * width * 0.08;
+                const seed = grainIndex * 7 + segmentIndex * 131;
+                const across = (chalkRandom(seed + 1) * 2 - 1) * width * 0.53;
+                const along = (chalkRandom(seed + 2) * 2 - 1) * width * 0.11;
                 const cx = start.x + dx * progress + normalX * across + (dx / length) * along;
                 const cy = start.y + dy * progress + normalY * across + (dy / length) * along;
-                const radius = width * (0.08 + 0.1 * (0.5 + 0.5 * Math.sin(phase * 0.83)));
-                grainMarks.push(`M ${cx - radius} ${cy} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`);
+                if (chalkRandom(seed + 3) < 0.76) {
+                  const poreScale = chalkRandom(seed + 4);
+                  const radius = width * (0.055 + Math.pow(poreScale, 1.4) * 0.25);
+                  poreMarks.push(`M ${cx - radius} ${cy} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`);
+                  if (poreScale > 0.48 || chalkRandom(seed + 10) < 0.28) {
+                    const satelliteRadius = radius * (0.38 + chalkRandom(seed + 11) * 0.4);
+                    const satelliteAngle = chalkRandom(seed + 12) * Math.PI * 2;
+                    const satelliteDistance = radius * (0.38 + chalkRandom(seed + 13) * 0.72);
+                    const satelliteX = cx + Math.cos(satelliteAngle) * satelliteDistance;
+                    const satelliteY = cy + Math.sin(satelliteAngle) * satelliteDistance;
+                    poreMarks.push(`M ${satelliteX - satelliteRadius} ${satelliteY} a ${satelliteRadius} ${satelliteRadius} 0 1 0 ${satelliteRadius * 2} 0 a ${satelliteRadius} ${satelliteRadius} 0 1 0 ${-satelliteRadius * 2} 0`);
+                  }
+                }
+                // Fine chalk powder sits both inside and just beyond the core.
+                // Three opacity bands avoid hundreds of individual SVG nodes.
+                if (chalkRandom(seed + 5) < 0.72) {
+                  const dustAcross = across + (chalkRandom(seed + 6) * 2 - 1) * width * 0.18;
+                  const dustX = start.x + dx * progress + normalX * dustAcross;
+                  const dustY = start.y + dy * progress + normalY * dustAcross;
+                  const dustRadius = width * (0.018 + Math.pow(chalkRandom(seed + 7), 2) * 0.065);
+                  const band = Math.min(2, Math.floor(chalkRandom(seed + 8) * 3));
+                  depositMarks[band].push(`M ${dustX - dustRadius} ${dustY} a ${dustRadius} ${dustRadius} 0 1 0 ${dustRadius * 2} 0 a ${dustRadius} ${dustRadius} 0 1 0 ${-dustRadius * 2} 0`);
+                }
                 grainIndex += 1;
-                nextGrainDistance += grainSpacing;
+                nextGrainDistance += grainSpacing * (0.55 + chalkRandom(seed + 9) * 0.9);
               }
               traversed += length;
             }
             const grainTexture = document.createElementNS(layer.namespaceURI, 'path');
-            grainTexture.setAttribute('d', grainMarks.join(' '));
+            grainTexture.setAttribute('d', poreMarks.join(' '));
             grainTexture.setAttribute('fill', '#050505');
             mask.append(grainTexture);
             definitions.append(mask);
-            const chalkSurface = appendLine(path, path.points, { opacity: 0.94, width: width * 1.08 });
+            const chalkSurface = appendLine(path, path.points, { opacity: 0.86, width: width * 1.06 });
             chalkSurface.setAttribute('mask', `url(#${maskId})`);
+            [0.16, 0.28, 0.44].forEach((opacity, band) => {
+              if (depositMarks[band].length === 0) return;
+              const deposits = document.createElementNS(layer.namespaceURI, 'path');
+              deposits.setAttribute('d', depositMarks[band].join(' '));
+              deposits.setAttribute('fill', path.color);
+              deposits.setAttribute('fill-opacity', String(opacity));
+              layer.append(deposits);
+            });
           } else if (stroke === 'marker') {
             appendLine(path, path.points, { opacity: 0.38, width: width * 2.35 });
           } else if (stroke === 'dashed') {
@@ -3301,7 +3363,15 @@
           content.append(section);
         } else {
           slide.children.forEach((node) =>
-            content.append(createNode(node, revealState, slide.theme))
+            content.append(
+              createNode(
+                node,
+                revealState,
+                slide.theme,
+                slide.deckShadowDefaults,
+                slide.deckGlassDefaults
+              )
+            )
           );
         }
         if (slide.headingFont || slide.font)
@@ -3318,10 +3388,14 @@
           primaryHeading.style.alignSelf =
             { left: 'flex-start', center: 'center', right: 'flex-end' }[headingAlign] || 'center';
           primaryHeading.style.textAlign = headingAlign;
+          if (slide.headingPanelPadding) primaryHeading.style.padding = slide.headingPanelPadding;
+          if (slide.headingPanelMaxWidth)
+            primaryHeading.style.maxWidth = slide.headingPanelMaxWidth;
           primaryHeading.style.width =
-            slide.headingPosition && slide.headingPosition !== 'flow'
+            slide.headingPanelWidth ||
+            (slide.headingPosition && slide.headingPosition !== 'flow'
               ? 'calc(100% - 2.5rem)'
-              : '100%';
+              : '100%');
           if (slide.headingPosition && slide.headingPosition !== 'flow') {
             primaryHeading.style.left = '50%';
             primaryHeading.style.position = 'absolute';
@@ -3407,17 +3481,34 @@
           !slide.hideFooter &&
           (slide.footer?.left || slide.footer?.center || slide.footer?.right)
         ) {
+          const footerOptions = mergeFooterEffects(
+            slide.footer,
+            slide.deckShadowDefaults,
+            slide.deckGlassDefaults
+          );
           const footer = document.createElement('footer');
           footer.style.cssText =
             'bottom: 1.2rem; color: var(--np-muted); font-size: .72rem; left: 1.2rem; opacity: .82; position: absolute; right: 1.2rem;';
-          footer.style.fontFamily = slide.footer.font || 'inherit';
+          footer.style.fontFamily = footerOptions.font || 'inherit';
+          applyBlockStyle(footer, {
+            shadow: footerOptions.shadow,
+            'shadow-color': footerOptions.shadowColor,
+            'shadow-opacity': footerOptions.shadowOpacity,
+            'shadow-angle': footerOptions.shadowAngle,
+            'shadow-distance': footerOptions.shadowDistance,
+            'shadow-offset': footerOptions.shadowOffset,
+            'shadow-blur': footerOptions.shadowBlur,
+            'shadow-curve': footerOptions.shadowCurve,
+            'shadow-size': footerOptions.shadowSize
+          });
           const addFooterSlot = (text, position, alignment, fontFamily) => {
             if (!text) return;
             const slot = document.createElement('span');
             slot.style.position = 'absolute';
             slot.style.textAlign = alignment;
             slot.style.whiteSpace = 'nowrap';
-            slot.style.fontFamily = fontFamily || slide.footer.font || 'inherit';
+            slot.style.fontFamily = fontFamily || footerOptions.font || 'inherit';
+            applyBlockStyle(slot, footerOptions.glassStyle || {});
             if (position === 'left') slot.style.left = '0';
             if (position === 'right') slot.style.right = '0';
             if (position === 'center') {
@@ -3604,7 +3695,17 @@
         stage.style.transform = `translate(-50%, -50%) scale(${Number.isFinite(scale) ? scale : 1})`;
       }
 
-      function createNode(node, revealState = { remaining: Number.POSITIVE_INFINITY }, theme = {}) {
+      function createNode(
+        node,
+        revealState = { remaining: Number.POSITIVE_INFINITY },
+        theme = {},
+        deckShadowDefaults = {},
+        deckGlassDefaults = {}
+      ) {
+        node = {
+          ...node,
+          blockStyle: mergeDeckBlockStyle(deckShadowDefaults, deckGlassDefaults, node)
+        };
         if (node.type === 'paragraph' && node.poll) {
           const lines = node.text
             .split('\n')
@@ -3890,7 +3991,11 @@
             element.style.gridTemplateColumns = `repeat(${node.columnsPerRow || 2}, minmax(0, 1fr))`;
           node.columns.forEach((column) => {
             const cell = document.createElement('div');
-            column.forEach((child) => cell.append(createNode(child, revealState, theme)));
+            column.forEach((child) =>
+              cell.append(
+                createNode(child, revealState, theme, deckShadowDefaults, deckGlassDefaults)
+              )
+            );
             element.append(cell);
           });
         } else if (node.type === 'pdf') element.textContent = `PDF · page ${node.page}`;
@@ -3898,6 +4003,65 @@
           element.textContent = `${node.type} · ${node.src}`;
         applyBlockStyle(element, node.blockStyle);
         return element;
+      }
+
+      function mergeDeckBlockStyle(shadowDefaults, glassDefaults, node) {
+        const shadows =
+          shadowDefaults && typeof shadowDefaults === 'object' ? shadowDefaults : {};
+        const glass = glassDefaults && typeof glassDefaults === 'object' ? glassDefaults : {};
+        const target =
+          node.type === 'chart'
+            ? 'plot'
+            : ['heading', 'image', 'pdf', 'table', 'code', 'quote'].includes(node.type)
+              ? node.type
+              : 'block';
+        const resolvedGlass = mergeGlassStyleLayers(
+          glass.block,
+          glass[target],
+          node.blockStyle
+        );
+        return {
+          ...(shadows.block && typeof shadows.block === 'object' ? shadows.block : {}),
+          ...(shadows[target] && typeof shadows[target] === 'object' ? shadows[target] : {}),
+          ...resolvedGlass,
+          ...(node.blockStyle && typeof node.blockStyle === 'object' ? node.blockStyle : {})
+        };
+      }
+
+      function mergeGlassStyleLayers(...layers) {
+        const merged = {};
+        layers.forEach((layer) => {
+          if (!layer || typeof layer !== 'object') return;
+          if (Object.hasOwn(layer, 'glass-alpha')) delete merged['glass-transparency'];
+          if (Object.hasOwn(layer, 'glass-transparency')) delete merged['glass-alpha'];
+          Object.assign(merged, layer);
+        });
+        return merged;
+      }
+
+      function mergeFooterEffects(footer, shadowDefaults, glassDefaults) {
+        const fields = {
+          shadow: 'shadow',
+          shadowColor: 'shadow-color',
+          shadowOpacity: 'shadow-opacity',
+          shadowAngle: 'shadow-angle',
+          shadowDistance: 'shadow-distance',
+          shadowOffset: 'shadow-offset',
+          shadowBlur: 'shadow-blur',
+          shadowCurve: 'shadow-curve',
+          shadowSize: 'shadow-size'
+        };
+        const merged = { ...(footer || {}) };
+        const sharedShadow = shadowDefaults?.block;
+        if (sharedShadow && typeof sharedShadow === 'object')
+          Object.entries(fields).forEach(([field, property]) => {
+            if (!merged[field]) merged[field] = sharedShadow[property] || '';
+          });
+        merged.glassStyle = mergeGlassStyleLayers(
+          glassDefaults?.block,
+          glassDefaults?.footer
+        );
+        return merged;
       }
 
       function applyBlockStyle(element, options) {

@@ -466,9 +466,12 @@ function createFymaTheme(paletteName, options = {}) {
     background: `linear-gradient(${gradientDirection}, ${pale} 0%, #ffffff 100%)`,
     border: middle,
     codeComment: '#64748b',
-    codeKeyword: dark,
+    // Fyma body text intentionally uses the palette's dark tone. Keep code
+    // categories independent from it so syntax highlighting remains visible,
+    // especially for fyma-green where foreground and keywords were identical.
+    codeKeyword: '#1d4ed8',
     codeNumber: highlight,
-    codeString: '#18794e',
+    codeString: '#9f1239',
     foreground: dark,
     headingColor: dark,
     headingRule: dark,
@@ -536,13 +539,30 @@ function safeCssColor(value, fallback) {
     : fallback;
 }
 
+// These defaults make the heading-panel controls available to every built-in
+// and generated theme. Add the same keys to an individual theme above when it
+// needs a different visual identity.
+function withHeadingPanelDefaults(theme) {
+  const isGlassTheme = Boolean(theme.headingBackdropFilter);
+  return {
+    ...theme,
+    // These are deck-wide visual defaults. A slide directive always wins.
+    headingOffset: theme.headingOffset ?? '0,-18px',
+    headingPanelMaxWidth: theme.headingPanelMaxWidth ?? '',
+    headingPanelPadding: theme.headingPanelPadding ?? '.10em .28em .12em',
+    // Glass headers read as a continuous translucent bar, while all other
+    // themes preserve their historic narrower positioned panel.
+    headingPanelWidth: theme.headingPanelWidth ?? (isGlassTheme ? '100%' : '')
+  };
+}
+
 /** Returns a named viewer palette, falling back to the default palette. */
 export function getTheme(name, options = {}) {
   const requested = String(name ?? '').toLowerCase();
   if (requested === 'fyma' || requested.startsWith('fyma-')) {
     const palette = requested.slice(5) || String(options.fymaPalette ?? 'blue').toLowerCase();
-    return createFymaTheme(palette, options);
+    return withHeadingPanelDefaults(createFymaTheme(palette, options));
   }
-  if (requested === 'ciment') return createCimentTheme(options);
-  return themes[requested] ?? themes.default;
+  if (requested === 'ciment') return withHeadingPanelDefaults(createCimentTheme(options));
+  return withHeadingPanelDefaults(themes[requested] ?? themes.default);
 }

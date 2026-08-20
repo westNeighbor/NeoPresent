@@ -423,6 +423,21 @@ animation: draw
     });
   });
 
+  it('accepts outer chart padding and SVG canvas trimming', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: radar
+labels: A, B, C
+values: 2, 3, 4
+chart-padding: 12px 20px
+chart-trim: 0 80 0 80
+\`\`\``);
+
+    expect(deck.children[0]!.children[0]!.getAttribute('plotStyle')).toMatchObject({
+      'chart-padding': '12px 20px',
+      'chart-trim': '0 80 0 80'
+    });
+  });
+
   it.each([
     ['ratio-panel', 'ratio'],
     ['efficiency', 'efficiency'],
@@ -724,6 +739,19 @@ trendline: linear
     expect(chart.xValues).toEqual([1, 2, 3]);
     expect(chart.errorValues).toEqual([0.2, 0.3, 0.25]);
     expect(chart.trendline).toBe(true);
+  });
+
+  it('uses nonnumeric inline x values as categorical tick labels', () => {
+    const deck = parseMarkdown(`\`\`\`plot
+type: line
+x: A, B, C
+y: 12, 20, 16
+\`\`\``);
+
+    const chart = deck.children[0]!.children[0] as Chart;
+    expect(chart.labels).toEqual(['A', 'B', 'C']);
+    expect(chart.xValues).toEqual([]);
+    expect(chart.getAttribute('xField')).toBeUndefined();
   });
 
   it('compiles scientific axis labels including units', () => {
@@ -1734,5 +1762,87 @@ values: 5
     expect(chart.xValues).toEqual([2]);
     expect(chart.getAttribute('heatmapYValues')).toEqual([3]);
     expect(chart.values).toEqual([5]);
+  });
+});
+
+describe('heading panel directives', () => {
+  it('inherits deck defaults and permits a slide-level override', () => {
+    const deck = parseMarkdown(`@heading-panel-width fit-content
+@heading-panel-max-width 92%
+@heading-panel-padding .10em .28em .12em
+
+# First
+
+---
+@heading-panel-width 70%
+
+# Second`);
+
+    expect(deck.children[0]?.getAttribute('headingPanelWidth')).toBe('fit-content');
+    expect(deck.children[0]?.getAttribute('headingPanelMaxWidth')).toBe('92%');
+    expect(deck.children[0]?.getAttribute('headingPanelPadding')).toBe('.10em .28em .12em');
+    expect(deck.children[1]?.getAttribute('headingPanelWidth')).toBe('70%');
+    expect(deck.children[1]?.getAttribute('headingPanelMaxWidth')).toBe('92%');
+  });
+});
+
+describe('deck-wide shadow directives', () => {
+  it('keeps an ordinary local @shadow directive out of deck-wide defaults', () => {
+    const deck = parseMarkdown(`@plot-shadow drop
+@plot-shadow-blur 7px
+
+# Shadow scope
+
+@shadow contact
+@shadow-blur 3px
+@shadow-perspective 65
+Local paragraph`);
+    const defaults = deck.children[0]?.getAttribute<Record<string, Record<string, string>>>(
+      'deckShadowDefaults'
+    );
+    const paragraph = deck.children[0]?.children.find((node) => node.type === 'paragraph');
+
+    expect(defaults?.plot).toEqual({ shadow: 'drop', 'shadow-blur': '7px' });
+    expect(defaults?.block).toEqual({});
+    expect(paragraph?.getAttribute<Record<string, string>>('blockStyle')).toEqual({
+      shadow: 'contact',
+      'shadow-blur': '3px',
+      'shadow-perspective': '65'
+    });
+  });
+
+  it('parses deck-wide and footer contact-shadow perspective', () => {
+    const deck = parseMarkdown(`@plot-shadow contact
+@plot-shadow-perspective -45
+@footer-shadow contact
+@footer-shadow-perspective 70
+
+# Perspective`);
+
+    expect(deck.children[0]?.getAttribute('deckShadowDefaults')).toMatchObject({
+      plot: { shadow: 'contact', 'shadow-perspective': '-45' }
+    });
+    expect(deck.getAttribute('footerShadowPerspective')).toBe('70');
+  });
+});
+
+describe('deck-wide glass directives', () => {
+  it('keeps ordinary @glass local while inheriting targeted glass defaults', () => {
+    const deck = parseMarkdown(`@block-glass on
+@block-glass-blur 18px
+@plot-glass-alpha 10%
+
+# Glass scope
+
+@glass off
+Local paragraph`);
+    const defaults = deck.children[0]?.getAttribute<Record<string, Record<string, string>>>(
+      'deckGlassDefaults'
+    );
+    const paragraph = deck.children[0]?.children.find((node) => node.type === 'paragraph');
+
+    expect(defaults?.block).toEqual({ glass: 'on', 'glass-blur': '18px' });
+    expect(defaults?.plot).toEqual({ 'glass-alpha': '10%' });
+    expect(paragraph?.getAttribute<Record<string, string>>('blockStyle')).toEqual({ glass: 'off' });
   });
 });

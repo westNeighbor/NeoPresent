@@ -5,12 +5,12 @@ import { paletteGradientStops, resolvePalette, samplePalette } from './rootPalet
 /** Converts a NeoPresent slide into the VDOM consumed by a Neo component. */
 export function createSlideVdom(...args) {
   const vdom = createSlideVdomRaw(...args);
-  applyBlockTransitions(vdom, args[0], args[4], args[5] !== false);
+  applyBlockTransitions(vdom, args[0], args[4], args[5] !== false, args[13]);
   applyTextAnimations(vdom, args[0], args[5] !== false);
   return makeSlideSizingResponsive(vdom, args[0]);
 }
 
-function applyBlockTransitions(vdom, slide, revealIndex, animate) {
+function applyBlockTransitions(vdom, slide, revealIndex, animate, revealDirection = 'forward') {
   if (!Array.isArray(vdom?.cn) || !Array.isArray(slide?.children)) return;
   const activeRevealIndex = revealIndex ?? Number.POSITIVE_INFINITY;
   const trigger = String(slide.getAttribute?.('blockTransitionTrigger') ?? 'auto').toLowerCase();
@@ -42,6 +42,13 @@ function applyBlockTransitions(vdom, slide, revealIndex, animate) {
       if (enterSteps.has(next)) return enterSteps.get(next);
     return Number.POSITIVE_INFINITY;
   };
+  const nextEnterType = (index) => {
+    for (let next = index + 1; next < slide.children.length; next += 1) {
+      const value = String(slide.children[next]?.getAttribute?.('blockEnter') ?? '').toLowerCase();
+      if (value) return value;
+    }
+    return '';
+  };
   slide.children.forEach((child, index) => {
     const target = vdom.cn[index];
     if (!target || typeof target !== 'object') return;
@@ -63,16 +70,25 @@ function applyBlockTransitions(vdom, slide, revealIndex, animate) {
     if (enter) {
       const step = enterSteps.get(index);
       const visible = trigger === 'auto' || activeRevealIndex >= step;
+      const reversingMorph =
+        trigger === 'reveal' &&
+        revealDirection === 'backward' &&
+        enter === 'morph' &&
+        activeRevealIndex === step - 1;
+      const renderedVisible = visible || reversingMorph;
       target.style = {
         ...target.style,
         '--neopresent-block-base-zoom': baseZoom,
-        maxHeight: enter === 'grow' || enter === 'zoom' ? (visible ? '100vh' : '0px') : undefined,
-        opacity: visible ? 1 : 0,
+        maxHeight:
+          enter === 'grow' || enter === 'zoom' ? (renderedVisible ? '100vh' : '0px') : undefined,
+        opacity: renderedVisible ? 1 : 0,
         overflow: target.style?.overflow,
-        pointerEvents: visible ? target.style?.pointerEvents : 'none',
-        visibility: visible ? 'visible' : 'hidden',
-        zoom: visible ? baseZoom : '0%'
+        pointerEvents: renderedVisible ? target.style?.pointerEvents : 'none',
+        visibility: renderedVisible ? 'visible' : 'hidden',
+        zoom: renderedVisible ? baseZoom : '0%'
       };
+      if (reversingMorph)
+        target.data = { ...target.data, neopresentReverseMorph: 'true' };
       if (
         visible &&
         ((trigger === 'auto' && animate) || (trigger === 'reveal' && activeRevealIndex === step))
@@ -103,10 +119,15 @@ function applyBlockTransitions(vdom, slide, revealIndex, animate) {
           position: exit === 'replace' ? 'absolute' : target.style?.position,
           zoom: exit === 'replace' ? baseZoom : scale
         };
-        if (animateExit)
+        if (animateExit) {
+          const exitAnimation =
+            exit === 'replace' && nextEnterType(index) === 'morph'
+              ? 'neopresent-block-morph-out'
+              : `neopresent-block-${exit}`;
           animations.push(
-            `neopresent-block-${exit} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both`
+            `${exitAnimation} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both`
           );
+        }
       }
     }
     if (animations.length > 0) {
@@ -116,6 +137,466 @@ function applyBlockTransitions(vdom, slide, revealIndex, animate) {
       if (child.type === 'pdf') target.style.animationPlayState = 'paused';
     }
   });
+  overlayReplacementSequences(vdom, slide, revealDirection);
+}
+
+function overlayReplacementSequences(vdom, slide, revealDirection = 'forward') {
+  const childCount = slide.children.length;
+  const renderedChildren = vdom.cn.slice(0, childCount);
+  const trailingChildren = vdom.cn.slice(childCount);
+  const result = [];
+  let index = 0;
+
+  while (index < childCount) {
+    const first = slide.children[index];
+    const next = slide.children[index + 1];
+    const nextEnter = String(next?.getAttribute?.('blockEnter') ?? '').toLowerCase();
+    const startsReplacementSequence =
+      String(first?.getAttribute?.('blockExit') ?? '').toLowerCase() === 'replace' &&
+      Boolean(nextEnter);
+
+    if (!startsReplacementSequence) {
+      result.push(renderedChildren[index]);
+      index += 1;
+      continue;
+    }
+
+    const sequence = [renderedChildren[index]];
+    let end = index + 1;
+    while (
+      end < childCount &&
+      Boolean(String(slide.children[end]?.getAttribute?.('blockEnter') ?? '').toLowerCase())
+    ) {
+      sequence.push(renderedChildren[end]);
+      if (String(slide.children[end]?.getAttribute?.('blockExit') ?? '').toLowerCase() !== 'replace')
+        break;
+      end += 1;
+    }
+
+    sequence.forEach((target) => {
+      if (!target || typeof target !== 'object') return;
+      target.style = {
+        ...target.style,
+        alignSelf: 'center',
+        gridArea: '1 / 1',
+        justifySelf: 'center',
+        position: 'relative'
+      };
+    });
+    prepareCompatibleLineMorphs(
+      sequence,
+      slide.children.slice(index, index + sequence.length),
+      revealDirection
+    );
+    result.push({
+      tag: 'div',
+      data: { neopresentReplacementHost: 'true' },
+      style: {
+        alignItems: 'center',
+        alignSelf: 'center',
+        display: 'grid',
+        justifyItems: 'center',
+        margin: 0,
+        maxHeight: '100%',
+        maxWidth: '100%',
+        width: '100%'
+      },
+      cn: sequence
+    });
+    index += sequence.length;
+  }
+
+  vdom.cn = [...result, ...trailingChildren];
+}
+
+function prepareCompatibleLineMorphs(rendered, nodes, revealDirection = 'forward') {
+  for (let index = 1; index < rendered.length; index += 1) {
+    const later = rendered[index];
+    const earlier = rendered[index - 1];
+    const reversing =
+      revealDirection === 'backward' && later?.data?.neopresentReverseMorph === 'true';
+    const incomingAnimation = String(later?.style?.animation ?? '');
+    if (!reversing && !incomingAnimation.includes('neopresent-block-enter-morph')) continue;
+    if (!canMorphCharts(nodes[index - 1], nodes[index])) {
+      if (reversing) applyReverseMorphFallback(earlier, later, nodes[index]);
+      continue;
+    }
+
+    const outgoing = reversing ? later : earlier;
+    const incoming = reversing ? earlier : later;
+
+    const outgoingMarkupHost = findChartMarkupHost(outgoing);
+    const incomingMarkupHost = findChartMarkupHost(incoming);
+    const sourcePaths = getMorphLinePaths(outgoingMarkupHost?.html);
+    const targetPaths = getMorphLinePaths(incomingMarkupHost?.html);
+    const sourcePoints = getMorphPointTransforms(outgoingMarkupHost?.html);
+    const targetPoints = getMorphPointTransforms(incomingMarkupHost?.html);
+    const sourceTicks = getMorphTickElements(outgoingMarkupHost?.html);
+    const targetTicks = getMorphTickElements(incomingMarkupHost?.html);
+    const sourceFitTexts = getMorphFitTextElements(outgoingMarkupHost?.html);
+    const targetFitTexts = getMorphFitTextElements(incomingMarkupHost?.html);
+    const sourceMarks = getMorphSvgMarks(outgoingMarkupHost?.html);
+    const targetMarks = getMorphSvgMarks(incomingMarkupHost?.html);
+    if (
+      sourcePaths.size + sourcePoints.size + sourceMarks.size === 0 ||
+      sourcePaths.size !== targetPaths.size ||
+      sourcePoints.size !== targetPoints.size ||
+      [...sourcePaths.keys()].some((key) => !targetPaths.has(key)) ||
+      [...sourcePoints.keys()].some((key) => !targetPoints.has(key))
+    )
+      continue;
+
+    const duration = normalizeAnimationTime(
+      nodes[index]?.getAttribute?.('blockTransitionDuration'),
+      '650ms'
+    );
+    const delay = normalizeAnimationTime(
+      nodes[index]?.getAttribute?.('blockTransitionDelay'),
+      '0ms'
+    );
+    const morphId = `np-line-morph-${hashMorphText(
+      [
+        ...sourcePaths.values(),
+        ...targetPaths.values(),
+        ...sourcePoints.values(),
+        ...targetPoints.values()
+      ].join('|')
+    )}`;
+    const rules = [];
+    let compatibleGeometry = true;
+    for (const [key, sourcePath] of sourcePaths) {
+      const targetPath = targetPaths.get(key);
+      if (!pathsCanInterpolate(sourcePath, targetPath)) {
+        compatibleGeometry = false;
+        break;
+      }
+      const animationName = `${morphId}-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+      rules.push(
+        `[data-neopresent-morph-id="${morphId}"] [data-neopresent-series-line="${key}"]{animation:${animationName} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both!important}`,
+        `@keyframes ${animationName}{from{d:path("${sourcePath}")}to{d:path("${targetPath}")}}`
+      );
+    }
+    if (!compatibleGeometry) continue;
+    for (const [key, sourceTransform] of sourcePoints) {
+      const targetTransform = targetPoints.get(key);
+      const animationName = `${morphId}-point-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+      const sourceCssTransform = svgTransformToCss(sourceTransform);
+      const targetCssTransform = svgTransformToCss(targetTransform);
+      if (!sourceCssTransform || !targetCssTransform) {
+        compatibleGeometry = false;
+        break;
+      }
+      rules.push(
+        `[data-neopresent-morph-id="${morphId}"] [data-neopresent-series-point="${key}"]{animation:${animationName} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both!important}`,
+        `@keyframes ${animationName}{from{transform:${sourceCssTransform}}to{transform:${targetCssTransform}}}`
+      );
+    }
+    if (!compatibleGeometry) continue;
+    const targetStyle = nodes[index]?.getAttribute?.('plotStyle') ?? {};
+    const sourceStyle = nodes[index - 1]?.getAttribute?.('plotStyle') ?? {};
+    const morphAxis = !['false', 'off', 'no', '0'].includes(
+      String(targetStyle['morph-axis'] ?? sourceStyle['morph-axis'] ?? 'true').toLowerCase()
+    );
+    const morphText = String(
+      targetStyle['morph-text'] ?? sourceStyle['morph-text'] ?? 'crossfade'
+    ).toLowerCase();
+    let sourceTickClones = '';
+    if (
+      morphAxis &&
+      morphText !== 'none' &&
+      JSON.stringify(sourceTicks.map((tick) => tick.text)) !==
+        JSON.stringify(targetTicks.map((tick) => tick.text))
+    ) {
+      const tickIn = `${morphId}-tick-in`;
+      const tickOut = `${morphId}-tick-out`;
+      rules.push(
+        `[data-neopresent-morph-id="${morphId}"] [data-neopresent-x-tick-index]{animation:${tickIn} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both!important}`,
+        `[data-neopresent-morph-id="${morphId}"] [data-neopresent-morph-source-tick]{animation:${tickOut} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both!important;pointer-events:none}`,
+        `@keyframes ${tickIn}{from{opacity:0}to{opacity:1}}`,
+        `@keyframes ${tickOut}{from{opacity:1}to{opacity:0}}`
+      );
+      sourceTickClones = sourceTicks
+        .map((tick) =>
+          tick.markup.replace(
+            /data-neopresent-x-tick-index="[^"]+"/i,
+            `data-neopresent-morph-source-tick="${tick.index}"`
+          )
+        )
+        .join('');
+    }
+    let sourceFitTextClones = '';
+    if (morphText !== 'none') {
+      const changedFitTextKeys = [...targetFitTexts.keys()].filter(
+        (key) =>
+          sourceFitTexts.has(key) &&
+          sourceFitTexts.get(key).text !== targetFitTexts.get(key).text
+      );
+      if (changedFitTextKeys.length > 0) {
+        const fitTextIn = `${morphId}-fit-text-in`;
+        const fitTextOut = `${morphId}-fit-text-out`;
+        rules.push(
+          `[data-neopresent-morph-id="${morphId}"] [data-neopresent-fit-text]{animation:${fitTextIn} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both!important}`,
+          `[data-neopresent-morph-id="${morphId}"] [data-neopresent-morph-source-fit-text]{animation:${fitTextOut} ${duration} cubic-bezier(.2,.8,.2,1) ${delay} both!important;pointer-events:none}`,
+          `@keyframes ${fitTextIn}{from{opacity:0}to{opacity:1}}`,
+          `@keyframes ${fitTextOut}{from{opacity:1}to{opacity:0}}`
+        );
+        sourceFitTextClones = changedFitTextKeys
+          .map((key) =>
+            sourceFitTexts
+              .get(key)
+              .markup.replace(
+                /data-neopresent-fit-text="[^"]+"/i,
+                `data-neopresent-morph-source-fit-text="${escapeSvgText(key)}"`
+              )
+          )
+          .join('');
+      }
+    }
+    if (rules.length === 0 && sourceMarks.size === 0) continue;
+
+    outgoing.style = { ...outgoing.style, animation: undefined, opacity: 0 };
+    incoming.style = { ...incoming.style, animation: undefined, opacity: 1 };
+    let morphedMarkup = addSvgMarkAnimations(
+      String(incomingMarkupHost.html),
+      sourceMarks,
+      targetMarks,
+      duration,
+      delay
+    );
+    incomingMarkupHost.html = morphedMarkup
+      .replace(
+        /<svg\b([^>]*)>/i,
+        `<svg data-neopresent-morph-id="${morphId}"$1><style>${rules.join('')}</style>`
+      )
+      .replace(/<\/svg>\s*$/i, `${sourceTickClones}${sourceFitTextClones}</svg>`);
+  }
+}
+
+function applyReverseMorphFallback(earlier, later, transitionNode) {
+  const duration = normalizeAnimationTime(
+    transitionNode?.getAttribute?.('blockTransitionDuration'),
+    '650ms'
+  );
+  const delay = normalizeAnimationTime(
+    transitionNode?.getAttribute?.('blockTransitionDelay'),
+    '0ms'
+  );
+  const timing = `${duration} cubic-bezier(.2,.8,.2,1) ${delay} both`;
+  earlier.style = {
+    ...earlier.style,
+    animation: `neopresent-block-enter-morph ${timing}`,
+    opacity: 1
+  };
+  later.style = {
+    ...later.style,
+    animation: `neopresent-block-morph-out ${timing}`,
+    opacity: 1,
+    pointerEvents: 'none'
+  };
+}
+
+function findChartMarkupHost(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (typeof node.html === 'string' && /<svg\b/i.test(node.html)) return node;
+  for (const child of Array.isArray(node.cn) ? node.cn : []) {
+    const match = findChartMarkupHost(child);
+    if (match) return match;
+  }
+  return null;
+}
+
+function canMorphCharts(source, target) {
+  if (source?.type !== 'chart' || target?.type !== 'chart') return false;
+  const sourceKind = String(source.kind ?? '').toLowerCase();
+  const targetKind = String(target.kind ?? '').toLowerCase();
+  if (sourceKind !== targetKind) return false;
+  if (!['line', 'area', 'scatter', 'bar', 'histogram', 'pie', 'radar', 'polar-function'].includes(sourceKind))
+    return false;
+  if (
+    ['title', 'xLabel', 'yLabel'].some(
+      (key) => String(source[key] ?? '') !== String(target[key] ?? '')
+    )
+  )
+    return false;
+  const sourceStyle = source.getAttribute?.('plotStyle') ?? {};
+  const targetStyle = target.getAttribute?.('plotStyle') ?? {};
+  const matching = String(targetStyle['morph-match'] ?? sourceStyle['morph-match'] ?? 'auto')
+    .trim()
+    .toLowerCase();
+  const sourceLabels = source.labels ?? [];
+  const targetLabels = target.labels ?? [];
+  const sourceX = source.xValues ?? [];
+  const targetX = target.xValues ?? [];
+  const pointCount = (node) =>
+    (node.series ?? []).length > 0
+      ? (node.series ?? []).map((series) => series.values?.length ?? 0)
+      : [node.values?.length ?? 0];
+  const countsMatch = JSON.stringify(pointCount(source)) === JSON.stringify(pointCount(target));
+  const xMatch = JSON.stringify(sourceX) === JSON.stringify(targetX) && sourceX.length > 0;
+  const keyMatch =
+    JSON.stringify(sourceLabels) === JSON.stringify(targetLabels) && sourceLabels.length > 0;
+  const semanticMatch =
+    matching === 'index'
+      ? countsMatch
+      : matching === 'x'
+        ? xMatch
+        : matching === 'key'
+          ? keyMatch
+          : xMatch || keyMatch || countsMatch;
+  if (!semanticMatch) return false;
+  const morphAxis = !['false', 'off', 'no', '0'].includes(
+    String(targetStyle['morph-axis'] ?? sourceStyle['morph-axis'] ?? 'true').toLowerCase()
+  );
+  if (
+    !morphAxis &&
+    (JSON.stringify(sourceLabels) !== JSON.stringify(targetLabels) ||
+      JSON.stringify(sourceX) !== JSON.stringify(targetX))
+  )
+    return false;
+  const morphDrawModes = (node, style) => {
+    const series = node.series ?? [];
+    const values = series.length > 0 ? series.map((item) => item.draw || style.draw) : [style.draw];
+    return values.map((value) =>
+      [...new Set(String(value || 'L').trim().toUpperCase().replace(/[^LP]/g, ''))]
+        .sort()
+        .join('') || 'L'
+    );
+  };
+  const sourceDrawModes = morphDrawModes(source, sourceStyle);
+  const targetDrawModes = morphDrawModes(target, targetStyle);
+  if (JSON.stringify(sourceDrawModes) !== JSON.stringify(targetDrawModes)) return false;
+  if (sourceDrawModes.some((mode) => !['L', 'P', 'LP'].includes(mode))) return false;
+  const stableSettings = [
+    'x-min',
+    'x-max',
+    'y-min',
+    'y-max',
+    'x-scale',
+    'y-scale',
+    'plot-width',
+    'plot-height',
+    'chart-padding',
+    'chart-trim'
+  ];
+  if (
+    ['line', 'area', 'scatter', 'bar', 'histogram'].includes(sourceKind) &&
+    (sourceStyle['y-min'] === undefined || sourceStyle['y-max'] === undefined)
+  )
+    return false;
+  return stableSettings.every(
+    (key) => String(sourceStyle[key] ?? '') === String(targetStyle[key] ?? '')
+  );
+}
+
+function getMorphLinePaths(markup) {
+  const paths = new Map();
+  const expression = /<path\b([^>]*\bdata-neopresent-series-line="([^"]+)"[^>]*)>/gi;
+  for (const match of String(markup ?? '').matchAll(expression)) {
+    const path = match[1].match(/\bd="([^"]+)"/i)?.[1];
+    if (path) paths.set(match[2], path);
+  }
+  return paths;
+}
+
+function getMorphPointTransforms(markup) {
+  const points = new Map();
+  const expression =
+    /<g\b([^>]*\bdata-neopresent-series-point="([^"]+)"[^>]*)>/gi;
+  for (const match of String(markup ?? '').matchAll(expression)) {
+    const transform = match[1].match(/\btransform="([^"]+)"/i)?.[1];
+    if (transform) points.set(match[2], transform);
+  }
+  return points;
+}
+
+function getMorphTickElements(markup) {
+  const ticks = [];
+  const expression =
+    /<text\b([^>]*\bdata-neopresent-x-tick-index="([^"]+)"[^>]*)>([\s\S]*?)<\/text>/gi;
+  for (const match of String(markup ?? '').matchAll(expression)) {
+    ticks.push({
+      index: match[2],
+      markup: match[0],
+      text: match[3].replace(/<[^>]+>/g, '').trim()
+    });
+  }
+  return ticks;
+}
+
+function getMorphFitTextElements(markup) {
+  const texts = new Map();
+  const expression =
+    /<text\b([^>]*\bdata-neopresent-fit-text="([^"]+)"[^>]*)>([\s\S]*?)<\/text>/gi;
+  for (const match of String(markup ?? '').matchAll(expression))
+    texts.set(match[2], {
+      markup: match[0],
+      text: match[3].replace(/<[^>]+>/g, '').trim()
+    });
+  return texts;
+}
+
+function getMorphSvgMarks(markup) {
+  const marks = new Map();
+  const expression =
+    /<(path|rect|circle|polygon|polyline)\b([^>]*\bdata-neopresent-morph-mark="([^"]+)"[^>]*)\/?>(?:[\s\S]*?<\/\1>)?/gi;
+  for (const match of String(markup ?? '').matchAll(expression)) {
+    const attributes = {};
+    for (const attribute of match[2].matchAll(/\b(d|points|x|y|width|height|cx|cy|r|rx)="([^"]+)"/gi))
+      attributes[attribute[1].toLowerCase()] = attribute[2];
+    marks.set(match[3], { attributes, tag: match[1].toLowerCase() });
+  }
+  return marks;
+}
+
+function addSvgMarkAnimations(markup, sourceMarks, targetMarks, duration, delay) {
+  if (sourceMarks.size === 0 || targetMarks.size === 0) return markup;
+  return String(markup).replace(
+    /<(path|rect|circle|polygon|polyline)\b([^>]*?\bdata-neopresent-morph-mark="([^"]+)"[^>]*?)(\/?)>/gi,
+    (full, tag, attributes, key, selfClosing) => {
+      const source = sourceMarks.get(key);
+      const target = targetMarks.get(key);
+      if (!source || !target || source.tag !== String(tag).toLowerCase()) return full;
+      const animations = Object.entries(target.attributes)
+        .filter(([name, value]) => source.attributes[name] !== undefined && source.attributes[name] !== value)
+        .filter(([name, value]) =>
+          name === 'd' || name === 'points'
+            ? pathsCanInterpolate(source.attributes[name], value)
+            : Number.isFinite(Number(source.attributes[name])) && Number.isFinite(Number(value))
+        )
+        .map(
+          ([name, value]) =>
+            `<animate attributeName="${name}" from="${escapeSvgText(source.attributes[name])}" to="${escapeSvgText(value)}" dur="${duration}" begin="${delay}" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".2 .8 .2 1"/>`
+        )
+        .join('');
+      if (!animations) return full;
+      return selfClosing
+        ? `<${tag}${attributes}>${animations}</${tag}>`
+        : `<${tag}${attributes}>${animations}`;
+    }
+  );
+}
+
+function svgTransformToCss(value) {
+  const translate = String(value ?? '').match(
+    /^translate\(\s*(-?(?:\d+\.?\d*|\.\d+))[,\s]+(-?(?:\d+\.?\d*|\.\d+))\s*\)$/i
+  );
+  if (!translate) return '';
+  return `translate(${translate[1]}px,${translate[2]}px)`;
+}
+
+function pathsCanInterpolate(source, target) {
+  const commands = (path) => String(path).match(/[a-z]/gi)?.join('').toUpperCase() ?? '';
+  const numbers = (path) => String(path).match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi)?.length ?? 0;
+  return commands(source) === commands(target) && numbers(source) === numbers(target);
+}
+
+function hashMorphText(value) {
+  let hash = 2166136261;
+  for (const character of String(value)) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function getEmbeddedRevealCount(node) {
@@ -280,14 +761,53 @@ function createSlideVdomRaw(
   const headingPosition = String(slide.getAttribute?.('headingPosition') ?? 'flow').toLowerCase();
   const headingAlign = String(slide.getAttribute?.('headingAlign') ?? alignment.text).toLowerCase();
   const bodyAlign = String(slide.getAttribute?.('bodyAlign') ?? alignment.text).toLowerCase();
-  const headingOffset = parseInlineOffset(slide.getAttribute?.('headingOffset')) ?? {
+  const headingOffset = parseInlineOffset(
+    slide.getAttribute?.('headingOffset') ?? theme.headingOffset
+  ) ?? {
     x: '0',
     y: '0'
   };
+  // CSS permits a unitless zero for `top` and `left`, but not inside a
+  // `calc()` which combines it with a percentage.  Positioned headings use
+  // that calculation to center their panel; normalize bare zero so the
+  // transform remains valid when no @heading-offset was supplied.
+  const headingTransformOffset = {
+    x: normalizeCalcOffset(headingOffset.x),
+    y: normalizeCalcOffset(headingOffset.y)
+  };
+  const headingPanelWidth =
+    String(slide.getAttribute?.('headingPanelWidth') ?? theme.headingPanelWidth ?? '').trim() ||
+    undefined;
+  const headingPanelMaxWidth =
+    String(slide.getAttribute?.('headingPanelMaxWidth') ?? theme.headingPanelMaxWidth ?? '').trim() ||
+    undefined;
+  const headingPanelPadding =
+    String(
+      slide.getAttribute?.('headingPanelPadding') ??
+        theme.headingPanelPadding ??
+        theme.headingPadding ??
+        ''
+    ).trim() ||
+    undefined;
+  const defaultPositionedHeadingWidth = fullBleed ? '96%' : '84%';
+  const resolvedHeadingPanelWidth = headingPanelWidth ?? defaultPositionedHeadingWidth;
+  // Keep the legacy heading decoration within the design canvas even when a
+  // theme adds panel padding. An explicit panel width remains unconstrained
+  // unless the author also supplies @heading-panel-max-width.
   const primaryHeading = slide.getAttribute?.('nestedContent')
     ? undefined
     : slide.children.find((node) => node.type === 'heading');
-  const footerNode = slide.getAttribute?.('hideFooter') ? null : createFooter(footer, theme);
+  const footerNode =
+    slide.getAttribute?.('hideFooter')
+      ? null
+      : createFooter(
+          mergeDeckFooterEffects(
+            footer,
+            slide.getAttribute?.('deckShadowDefaults'),
+            slide.getAttribute?.('deckGlassDefaults')
+          ),
+          theme
+        );
   const footnotesNode = createFootnotes(
     slide.getAttribute?.('footnotes'),
     theme,
@@ -366,7 +886,15 @@ function createSlideVdomRaw(
                 fontSize: '4.5rem',
                 lineHeight: 1.1,
                 margin: 0,
-                padding: theme.kind === 'fyma' ? '1.4rem 3rem' : theme.headingPadding
+                maxWidth: headingPanelMaxWidth,
+                padding:
+                  headingPanelPadding ??
+                  (theme.kind === 'fyma' ? '1.4rem 3rem' : theme.headingPadding),
+                position:
+                  headingOffset.x !== '0' || headingOffset.y !== '0' ? 'relative' : undefined,
+                top: headingOffset.y !== '0' ? headingOffset.y : undefined,
+                left: headingOffset.x !== '0' ? headingOffset.x : undefined,
+                width: headingPanelWidth
               }
             }
           ]
@@ -411,7 +939,12 @@ function createSlideVdomRaw(
     cn: [
       ...slide.children.map((node, nodeIndex) => {
         const nodeRevealIndex = getBlockLocalRevealIndex(slide, nodeIndex, revealIndex);
-        const blockEffects = createBlockStyle(node.getAttribute?.('blockStyle'));
+        const blockEffects = createDeckBlockStyle(
+          slide.getAttribute?.('deckShadowDefaults'),
+          slide.getAttribute?.('deckGlassDefaults'),
+          node,
+          node.getAttribute?.('blockStyle')
+        );
         if (node.type === 'paragraph' && node.getAttribute?.('feynman')) {
           const feynmanExportStages = !/^\s*export-stages\s*:\s*(?:false|no|off|0)\s*$/im.test(
             String(node.text ?? '')
@@ -590,6 +1123,10 @@ function createSlideVdomRaw(
                   children: node.columns[0]?.children ?? [],
                   getAttribute: (name) => {
                     if (name === 'nestedContent') return true;
+                    if (name === 'deckShadowDefaults')
+                      return slide.getAttribute?.('deckShadowDefaults');
+                    if (name === 'deckGlassDefaults')
+                      return slide.getAttribute?.('deckGlassDefaults');
                     if (name === 'reveal') return 'false';
                     if (name === 'blockTransitionTrigger') return 'auto';
                     if (
@@ -633,6 +1170,10 @@ function createSlideVdomRaw(
                   children: node.columns[0]?.children ?? [],
                   getAttribute: (name) => {
                     if (name === 'nestedContent') return true;
+                    if (name === 'deckShadowDefaults')
+                      return slide.getAttribute?.('deckShadowDefaults');
+                    if (name === 'deckGlassDefaults')
+                      return slide.getAttribute?.('deckGlassDefaults');
                     return ['reveal', 'blockTransitionTrigger'].includes(name)
                       ? (node.getAttribute?.(name) ?? slide.getAttribute?.(name))
                       : undefined;
@@ -683,6 +1224,10 @@ function createSlideVdomRaw(
                   children: column.children,
                   getAttribute: (name) => {
                     if (name === 'nestedContent') return true;
+                    if (name === 'deckShadowDefaults')
+                      return slide.getAttribute?.('deckShadowDefaults');
+                    if (name === 'deckGlassDefaults')
+                      return slide.getAttribute?.('deckGlassDefaults');
                     if (['reveal', 'blockTransitionTrigger'].includes(name))
                       return node.getAttribute?.(name) ?? slide.getAttribute?.(name);
                     if (
@@ -734,7 +1279,23 @@ function createSlideVdomRaw(
                 right: 'flex-end'
               }[headingAlign],
               textAlign: headingAlign,
-              width: positioned ? (fullBleed ? '96%' : '84%') : '100%',
+              boxSizing: node === primaryHeading ? 'border-box' : undefined,
+              maxWidth:
+                node === primaryHeading
+                  ? headingPanelMaxWidth ??
+                    (positioned && !headingPanelWidth ? defaultPositionedHeadingWidth : undefined)
+                  : undefined,
+              padding:
+                node === primaryHeading
+                  ? headingPanelPadding ??
+                    (theme.kind === 'fyma' ? '1.4rem 3rem' : theme.headingPadding)
+                  : undefined,
+              width:
+                node === primaryHeading && headingPanelWidth
+                  ? headingPanelWidth
+                  : positioned
+                    ? resolvedHeadingPanelWidth
+                    : '100%',
               ...(!positioned && (headingOffset.x !== '0' || headingOffset.y !== '0')
                 ? {
                     position: 'relative',
@@ -757,8 +1318,8 @@ function createSlideVdomRaw(
                     bottom: headingPosition === 'bottom' ? (fullBleed ? '2vw' : '3vw') : undefined,
                     transform:
                       headingPosition === 'center'
-                        ? `translate(calc(-50% + ${headingOffset.x}), calc(-50% + ${headingOffset.y}))`
-                        : `translate(calc(-50% + ${headingOffset.x}), ${headingOffset.y})`,
+                        ? `translate(calc(-50% + ${headingTransformOffset.x}), calc(-50% + ${headingTransformOffset.y}))`
+                        : `translate(calc(-50% + ${headingTransformOffset.x}), ${headingTransformOffset.y})`,
                     zIndex: 2
                   }
                 : {}),
@@ -917,6 +1478,7 @@ function createSlideVdomRaw(
               maxWidth: '100%',
               overflowX: 'auto',
               padding: '1.25rem',
+              textAlign: 'left',
               whiteSpace: runnable ? 'pre-wrap' : undefined,
               width: '100%',
               ...blockEffects
@@ -941,7 +1503,14 @@ function createSlideVdomRaw(
                 : []),
               {
                 tag: 'code',
-                cn: highlightCode(node.code, node.language, theme)
+                cn: highlightCode(node.code, node.language, theme),
+                style: {
+                  display: 'block',
+                  flex: lineNumbers ? '1 1 auto' : undefined,
+                  minWidth: 0,
+                  textAlign: 'left',
+                  whiteSpace: runnable ? 'pre-wrap' : 'pre'
+                }
               }
             ]
           };
@@ -1928,24 +2497,52 @@ function splitQuoteAttribution(text) {
   return { attribution: lastLine, quote: lines.slice(0, -1).join('\n') };
 }
 
+function mergeDeckFooterEffects(footer, shadowDefaults, glassDefaults) {
+  const fieldMap = {
+    shadow: 'shadow',
+    shadowColor: 'shadow-color',
+    shadowOpacity: 'shadow-opacity',
+    shadowAngle: 'shadow-angle',
+    shadowDistance: 'shadow-distance',
+    shadowOffset: 'shadow-offset',
+    shadowBlur: 'shadow-blur',
+    shadowCurve: 'shadow-curve',
+    shadowSize: 'shadow-size',
+    shadowPerspective: 'shadow-perspective'
+  };
+  const merged = { ...footer };
+  const sharedShadow = shadowDefaults?.block;
+  if (sharedShadow && typeof sharedShadow === 'object')
+    for (const [field, shadowProperty] of Object.entries(fieldMap))
+      if (!merged[field]) merged[field] = sharedShadow[shadowProperty] ?? '';
+  const sharedGlass = mergeGlassStyleLayers(glassDefaults?.block, glassDefaults?.footer);
+  merged.glassStyle = sharedGlass;
+  return merged;
+}
+
 function createFooter(footer, theme) {
   if (!footer.left && !footer.center && !footer.right) return null;
   const offset = parseInlineOffset(footer.offset) ?? { x: '0', y: '0' };
-  const effectStyle = createBlockStyle({
+  const shadowStyle = createBlockStyle({
     shadow: footer.shadow,
     'shadow-color': footer.shadowColor,
     'shadow-opacity': footer.shadowOpacity,
     'shadow-angle': footer.shadowAngle,
     'shadow-distance': footer.shadowDistance,
     'shadow-offset': footer.shadowOffset,
-    'shadow-blur': footer.shadowBlur
+    'shadow-blur': footer.shadowBlur,
+    'shadow-curve': footer.shadowCurve,
+    'shadow-size': footer.shadowSize,
+    'shadow-perspective': footer.shadowPerspective
   });
+  const glassStyle = createBlockStyle(footer.glassStyle ?? {});
   const createSlot = (text, position, alignment, font) =>
     text
       ? {
           tag: 'span',
           cn: createInlineContent(resolveDatePlaceholders(text), theme),
           style: {
+            ...glassStyle,
             fontFamily: font || footer.font || 'inherit',
             left: position === 'left' ? 0 : position === 'center' ? '50%' : undefined,
             position: 'absolute',
@@ -1959,7 +2556,7 @@ function createFooter(footer, theme) {
   return {
     tag: 'footer',
     style: {
-      ...effectStyle,
+      ...shadowStyle,
       bottom: '1.4rem',
       color: theme.muted,
       fontFamily: footer.font || 'inherit',
@@ -2562,12 +3159,19 @@ function createInlineStyle(specification) {
   if (['drop', 'box', 'box-shadow', 'contact', 'curved'].includes(shadow)) {
     const shadowOffset = resolveShadowOffset(options);
     const blur = isInlineLength(options['shadow-blur']) ? options['shadow-blur'] : '.2em';
-    const color = withAlpha(options['shadow-color'] ?? '#000', options['shadow-opacity'] ?? '35%');
+    const shadowColor = options['shadow-color'] ?? '#000';
+    const shadowOpacity = options['shadow-opacity'] ?? '35%';
+    const color = withAlpha(shadowColor, shadowOpacity);
     if (shadow === 'drop')
       style.filter = `drop-shadow(${shadowOffset.x} ${shadowOffset.y} ${blur} ${color})`;
-    if (shadow === 'box' || shadow === 'box-shadow' || shadow === 'contact')
+    if (shadow === 'box' || shadow === 'box-shadow')
       style.boxShadow = `${shadowOffset.x} ${shadowOffset.y} ${blur} ${color}`;
-    if (shadow === 'curved') style.boxShadow = createCurvedShadow(options, shadowOffset, color);
+    if (shadow === 'contact') {
+      style.filter = createContactShadowFilter(options, shadowColor, shadowOpacity);
+    }
+    if (shadow === 'curved') {
+      style.filter = createCurvedShadow(options, shadowColor, shadowOpacity);
+    }
   }
   const reflection = parseInlineAlpha(options.reflection);
   if (reflection > 0)
@@ -2576,6 +3180,42 @@ function createInlineStyle(specification) {
   if (border || shadow || reflection > 0 || offset || style.transform)
     style.display = 'inline-block';
   return style;
+}
+
+function createDeckBlockStyle(shadowDefaults, glassDefaults, node, localOptions) {
+  const shadows = shadowDefaults && typeof shadowDefaults === 'object' ? shadowDefaults : {};
+  const glass = glassDefaults && typeof glassDefaults === 'object' ? glassDefaults : {};
+  const target = getShadowTarget(node);
+  const resolvedGlass = mergeGlassStyleLayers(glass.block, glass[target], localOptions);
+  return createBlockStyle({
+    ...(shadows.block && typeof shadows.block === 'object' ? shadows.block : {}),
+    ...(shadows[target] && typeof shadows[target] === 'object' ? shadows[target] : {}),
+    ...resolvedGlass,
+    ...(localOptions && typeof localOptions === 'object' ? localOptions : {}),
+    'shadow-target': target
+  });
+}
+
+function mergeGlassStyleLayers(...layers) {
+  const merged = {};
+  for (const layer of layers) {
+    if (!layer || typeof layer !== 'object') continue;
+    if (Object.hasOwn(layer, 'glass-alpha')) delete merged['glass-transparency'];
+    if (Object.hasOwn(layer, 'glass-transparency')) delete merged['glass-alpha'];
+    Object.assign(merged, layer);
+  }
+  return merged;
+}
+
+function getShadowTarget(node) {
+  if (node?.type === 'chart') return 'plot';
+  if (node?.type === 'heading') return 'heading';
+  if (node?.type === 'image') return 'image';
+  if (node?.type === 'pdf') return 'pdf';
+  if (node?.type === 'table') return 'table';
+  if (node?.type === 'code') return 'code';
+  if (node?.type === 'quote') return 'quote';
+  return 'block';
 }
 
 function createBlockStyle(options) {
@@ -2611,6 +3251,10 @@ function parseInlineOffset(value) {
   return isInlineLength(x, true) && isInlineLength(y, true) ? { x, y } : null;
 }
 
+function normalizeCalcOffset(value) {
+  return String(value).trim() === '0' ? '0px' : value;
+}
+
 function resolveShadowOffset(options) {
   const explicit = parseInlineOffset(options['shadow-offset']);
   const angle = Number.parseFloat(options['shadow-angle']);
@@ -2626,18 +3270,74 @@ function resolveShadowOffset(options) {
   };
 }
 
-function createCurvedShadow(options, offset, color) {
+function createContactShadowFilter(options, color, opacity) {
+  const rawPerspective = Number.parseFloat(options['shadow-perspective']);
+  const perspective = Math.max(
+    -100,
+    Math.min(100, Number.isFinite(rawPerspective) ? rawPerspective : 35)
+  );
+  const size = Math.max(1, shadowCssLengthToPixels(options['shadow-size'], 7));
+  const blur = Math.max(0.5, shadowCssLengthToPixels(options['shadow-blur'], 5));
+  const explicitOffset = parseInlineOffset(options['shadow-offset']);
+  const directDistance = parseInlineLength(options['shadow-distance']);
+  const hasAngle = Number.isFinite(Number.parseFloat(options['shadow-angle']));
+  const genericOffset = resolveShadowOffset(options);
+  const contactOffset =
+    !explicitOffset && !hasAngle && directDistance
+      ? { x: '0', y: `${directDistance.number}${directDistance.unit}` }
+      : genericOffset;
+  const offsetX = shadowCssLengthToPixels(contactOffset.x, 0);
+  const offsetY = shadowCssLengthToPixels(contactOffset.y, 3.5);
+  const perspectiveX = (perspective / 100) * size * 0.8;
+  const dx = trimInlineNumber(offsetX + perspectiveX);
+  const dy = trimInlineNumber(offsetY + Math.max(1, size * 0.2));
+  // A contact footprint is broad along the supporting surface and shallow
+  // vertically. Masking it to the lower edge prevents a conventional shadow
+  // from appearing around the other three sides of the object.
+  const blurX = trimInlineNumber(blur + size * 0.72);
+  const blurY = trimInlineNumber(Math.max(0.7, blur * 0.32));
+  const maskSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="256" viewBox="0 0 16 256"><defs><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".69" stop-color="#fff" stop-opacity="0"/><stop offset=".724" stop-color="#fff" stop-opacity="1"/><stop offset=".79" stop-color="#fff" stop-opacity=".82"/><stop offset=".88" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="16" height="256" fill="url(#m)"/></svg>`;
+  const maskUrl = `data:image/svg+xml,${encodeURIComponent(maskSvg)}`;
+  const filterId = `np-contact-${hashMorphText(`${perspective}|${dx}|${dy}|${blurX}|${blurY}|${size}|${color}|${opacity}`)}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg"><filter id="${filterId}" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="${blurX} ${blurY}" result="compressedBlur"/><feOffset in="compressedBlur" dx="${dx}" dy="${dy}" result="offsetFootprint"/><feFlood flood-color="${escapeSvgText(String(color))}" flood-opacity="${parseInlineAlpha(String(opacity))}" result="shadowColor"/><feComposite in="shadowColor" in2="offsetFootprint" operator="in" result="coloredFootprint"/><feImage href="${maskUrl}" x="-60%" y="-60%" width="220%" height="220%" preserveAspectRatio="none" result="contactMask"/><feComposite in="coloredFootprint" in2="contactMask" operator="in" result="shadow"/><feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge></filter></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}#${filterId}")`;
+}
+
+function createCurvedShadow(options, color, opacity) {
   const rawCurve = String(options['shadow-curve'] ?? options.curve ?? 'outward').toLowerCase();
   const curve = rawCurve === 'inward' ? -50 : rawCurve === 'outward' ? 50 : Number(rawCurve);
   const amount = Math.max(-100, Math.min(100, Number.isFinite(curve) ? curve : 50)) / 100;
-  const size = parseInlineLength(options['shadow-size']) ?? { number: 0.14, unit: 'em' };
-  const magnitude = Math.max(0.02, Math.abs(size.number));
-  const blur = `${trimInlineNumber(magnitude * 3.2)}${size.unit}`;
-  const spread = `-${trimInlineNumber(magnitude * 2.4)}${size.unit}`;
-  const bend = trimInlineNumber(Math.abs(amount) * 0.34);
-  const sideY = amount >= 0 ? `calc(${offset.y} + ${bend}em)` : offset.y;
-  const centerY = amount < 0 ? `calc(${offset.y} + ${bend}em)` : offset.y;
-  return `calc(${offset.x} - .42em) ${sideY} ${blur} ${spread} ${color}, calc(${offset.x} + .42em) ${sideY} ${blur} ${spread} ${color}, ${offset.x} ${centerY} ${blur} ${spread} ${color}`;
+  const offset = resolveShadowOffset(options);
+  const offsetX = shadowCssLengthToPixels(offset.x, 0);
+  const offsetY = shadowCssLengthToPixels(offset.y, 4);
+  const blur = Math.max(0, shadowCssLengthToPixels(options['shadow-blur'], 6));
+  const size = Math.max(1, shadowCssLengthToPixels(options['shadow-size'], 7));
+  const displacementScale = Math.max(0.5, Math.abs(amount) * (20 + size * 2));
+  const edgeGreen = amount >= 0 ? 255 : 128;
+  const centerGreen = amount >= 0 ? 128 : 255;
+  const middleGreen = Math.round(edgeGreen + (centerGreen - edgeGreen) * 0.58);
+  // The filter region extends 60% beyond every edge. Cover that complete
+  // region with the displacement map: transparent pixels outside a 100%-sized
+  // map have zero-valued channels and can make feDisplacementMap sample the
+  // source alpha a second time. The original object occupies 27.27%-72.73% of
+  // this expanded map, so keep the complete curve inside those bounds.
+  const mapSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="16" viewBox="0 0 256 16"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="rgb(128,${edgeGreen},128)"/><stop offset=".2727" stop-color="rgb(128,${edgeGreen},128)"/><stop offset=".38635" stop-color="rgb(128,${middleGreen},128)"/><stop offset=".5" stop-color="rgb(128,${centerGreen},128)"/><stop offset=".61365" stop-color="rgb(128,${middleGreen},128)"/><stop offset=".7273" stop-color="rgb(128,${edgeGreen},128)"/><stop offset="1" stop-color="rgb(128,${edgeGreen},128)"/></linearGradient></defs><rect width="256" height="16" fill="url(#g)"/></svg>`;
+  const mapUrl = `data:image/svg+xml,${encodeURIComponent(mapSvg)}`;
+  const fadeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="256" viewBox="0 0 16 256"><defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#fff"/><stop offset=".79" stop-color="#fff" stop-opacity=".58"/><stop offset=".88" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="16" height="256" fill="url(#f)"/></svg>`;
+  const fadeUrl = `data:image/svg+xml,${encodeURIComponent(fadeSvg)}`;
+  const filterId = `np-curved-${hashMorphText(`${rawCurve}|${offsetX}|${offsetY}|${blur}|${size}|${color}|${opacity}`)}`;
+  // Preserve a natural blur tail beneath the block, then fade it smoothly
+  // before the displaced final line can become a readable reflected copy.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg"><filter id="${filterId}" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB"><feImage href="${mapUrl}" x="-60%" y="-60%" width="220%" height="220%" preserveAspectRatio="none" result="curveMap"/><feDisplacementMap in="SourceAlpha" in2="curveMap" scale="${trimInlineNumber(displacementScale)}" xChannelSelector="R" yChannelSelector="G" result="warped"/><feOffset in="warped" dx="${offsetX}" dy="${offsetY}" result="offsetShadow"/><feGaussianBlur in="offsetShadow" stdDeviation="${trimInlineNumber(blur)}" result="blurredShadow"/><feFlood flood-color="${escapeSvgText(String(color))}" flood-opacity="${parseInlineAlpha(String(opacity))}" result="shadowColor"/><feComposite in="shadowColor" in2="blurredShadow" operator="in" result="unfadedShadow"/><feImage href="${fadeUrl}" x="-60%" y="-60%" width="220%" height="220%" preserveAspectRatio="none" result="bottomFade"/><feComposite in="unfadedShadow" in2="bottomFade" operator="in" result="shadow"/><feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge></filter></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}#${filterId}")`;
+}
+
+function shadowCssLengthToPixels(value, fallback) {
+  const length = parseInlineLength(value);
+  if (!length) return fallback;
+  if (length.unit === 'px') return length.number;
+  if (length.unit === 'em' || length.unit === 'rem') return length.number * 16;
+  return fallback;
 }
 
 function parseInlineLength(value) {
@@ -3269,15 +3969,114 @@ function cubicBezierPoint(a, c1, c2, b, t) {
 }
 
 function createChartView(chart, theme) {
-  return applyChartCaption(
-    applyChartHighlights(
-      applyRegisteredPlotDimensions(createChartViewRaw(chart, theme), chart),
+  return applyChartBoxControls(
+    applyChartCaption(
+      applyChartHighlights(
+        applyRegisteredPlotDimensions(createChartViewRaw(chart, theme), chart),
+        chart,
+        theme
+      ),
       chart,
       theme
     ),
-    chart,
-    theme
+    chart
   );
+}
+
+function applyChartBoxControls(view, chart) {
+  if (!view || typeof view !== 'object') return view;
+  const style = chart.plotStyle ?? chart.getAttribute?.('plotStyle') ?? {};
+  const padding = normalizeCssBox(style['chart-padding']);
+  if (padding)
+    view.style = {
+      ...view.style,
+      padding
+    };
+
+  const trim = parseSvgBox(style['chart-trim']);
+  if (!trim) return view;
+  const frame = findChartMarkupNode(view);
+  if (!frame) return view;
+  let trimmedWidth = null;
+  frame.html = frame.html.replace(
+    /viewBox="(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(-?(?:\d+(?:\.\d+)?|\.\d+))\s+(\d+(?:\.\d+)?|\.\d+)\s+(\d+(?:\.\d+)?|\.\d+)"/i,
+    (_match, rawX, rawY, rawWidth, rawHeight) => {
+      const x = Number(rawX);
+      const y = Number(rawY);
+      const width = Number(rawWidth);
+      const height = Number(rawHeight);
+      const top = Math.min(trim.top, Math.max(0, height * 0.45));
+      const right = Math.min(trim.right, Math.max(0, width * 0.45));
+      const bottom = Math.min(trim.bottom, Math.max(0, height * 0.45));
+      const left = Math.min(trim.left, Math.max(0, width * 0.45));
+      trimmedWidth = Math.max(1, width - left - right);
+      const trimmedHeight = Math.max(1, height - top - bottom);
+      return `viewBox="${x + left} ${y + top} ${trimmedWidth} ${trimmedHeight}"`;
+    }
+  );
+  if (!trimmedWidth) return view;
+
+  const hasExplicitWidth = Boolean(
+    safeDimension(style['chart-width'], '') || safeDimension(style['plot-width'], '')
+  );
+  if (!hasExplicitWidth) {
+    const width = `min(100%, ${trimmedWidth}px)`;
+    setChartMarkupPathWidth(view, frame, width);
+    frame.html = frame.html.replace(
+      /width:min\(100%,\s*\d+(?:\.\d+)?px\)/i,
+      `width:${width}`
+    );
+  }
+  return view;
+}
+
+function normalizeCssBox(value) {
+  const parts = String(value ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length < 1 || parts.length > 4) return null;
+  const normalized = parts.map((part) => safeDimension(part, ''));
+  return normalized.every(Boolean) ? normalized.join(' ') : null;
+}
+
+function parseSvgBox(value) {
+  const parts = String(value ?? '')
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((part) => Number(String(part).replace(/px$/i, '')));
+  if (parts.length < 1 || parts.length > 4 || parts.some((part) => !Number.isFinite(part) || part < 0))
+    return null;
+  const [first, second = first, third = first, fourth = second] = parts;
+  return parts.length === 1
+    ? { top: first, right: first, bottom: first, left: first }
+    : parts.length === 2
+      ? { top: first, right: second, bottom: first, left: second }
+      : parts.length === 3
+        ? { top: first, right: second, bottom: third, left: second }
+        : { top: first, right: second, bottom: third, left: fourth };
+}
+
+function setChartMarkupPathWidth(node, frame, width) {
+  if (!node || typeof node !== 'object') return false;
+  if (node === frame) {
+    node.style = {
+      ...node.style,
+      maxWidth: '100%',
+      width
+    };
+    return true;
+  }
+  if (!Array.isArray(node.cn)) return false;
+  const containsFrame = node.cn.some((child) => setChartMarkupPathWidth(child, frame, width));
+  if (containsFrame)
+    node.style = {
+      ...node.style,
+      maxWidth: '100%',
+      width
+    };
+  return containsFrame;
 }
 
 function applyRegisteredPlotDimensions(view, chart) {
@@ -3788,7 +4587,7 @@ function createPolarFunctionView(chart, theme) {
     theta: thetaValues[index],
     radius: radiusValues[index]
   }));
-  const path = `<polyline data-neopresent-mark-kind="polar-function" points="${points.map((point) => `${point.x},${point.y}`).join(' ')}" fill="none" stroke="${appearance.dataColor}" stroke-width="${Math.max(1, appearance.dataSize)}" stroke-linejoin="round" style="${specialAnimation(null, appearance)}"/>`;
+  const path = `<polyline data-neopresent-morph-mark="polar:0" data-neopresent-mark-kind="polar-function" points="${points.map((point) => `${point.x},${point.y}`).join(' ')}" fill="none" stroke="${appearance.dataColor}" stroke-width="${Math.max(1, appearance.dataSize)}" stroke-linejoin="round" style="${specialAnimation(null, appearance)}"/>`;
   const hoverStride = Math.max(1, Math.floor(count / 80));
   const hover = points
     .map((point, index) => {
@@ -4784,10 +5583,10 @@ function createRadarView(chart, theme) {
       const marks = points
         .map((point, index) => {
           const tooltip = `${item.name} · ${labels[index]}: ${formatChartValue(item.values[index])}`;
-          return `<circle data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="radar" cx="${point.x}" cy="${point.y}" r="${pointSize}" fill="${color}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tooltip)}</title></circle>`;
+          return `<circle data-neopresent-morph-mark="radar-point:${seriesIndex}:${index}" data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="radar" cx="${point.x}" cy="${point.y}" r="${pointSize}" fill="${color}" stroke="${theme.background}" stroke-width="1"><title>${escapeSvgText(tooltip)}</title></circle>`;
         })
         .join('');
-      return `<g data-neopresent-radar-series="${seriesIndex}" style="${animationStyle}"><polygon points="${polygonPoints(points)}" fill="${color}" fill-opacity="${fillAlpha}" stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>${marks}</g>`;
+      return `<g data-neopresent-radar-series="${seriesIndex}" style="${animationStyle}"><polygon data-neopresent-morph-mark="radar:${seriesIndex}" points="${polygonPoints(points)}" fill="${color}" fill-opacity="${fillAlpha}" stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>${marks}</g>`;
     })
     .join('');
   const legend = specialLegendEnabled(style, series.length > 1)
@@ -4879,7 +5678,7 @@ function createPieView(chart, theme) {
         : '';
       angle = endAngle;
       const tooltip = `${label}: ${formatChartValue(slice.value)} (${formatChartValue(percent)}%)`;
-      return `<g data-neopresent-pie-slice="${slice.index}" style="${animationStyle}"><path data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="pie" d="${path}" fill="${palette[visibleIndex % palette.length]}" stroke="${stroke}" stroke-width="${strokeWidth}"><title>${escapeSvgText(tooltip)}</title></path>${
+      return `<g data-neopresent-pie-slice="${slice.index}" style="${animationStyle}"><path data-neopresent-morph-mark="pie:${slice.index}" data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-mark-kind="pie" d="${path}" fill="${palette[visibleIndex % palette.length]}" stroke="${stroke}" stroke-width="${strokeWidth}"><title>${escapeSvgText(tooltip)}</title></path>${
         showLabels && percent >= 3
           ? `<text x="${labelPoint.x}" y="${labelPoint.y}" fill="${labelColor}" font-family="system-ui, sans-serif" font-size="${labelSize}" text-anchor="middle" dominant-baseline="middle" pointer-events="none">${escapeSvgText(label)} · ${formatChartValue(percent)}%</text>`
           : ''
@@ -5150,7 +5949,7 @@ function createChartViewRaw(chart, theme) {
   const labels = series[0].labels
     .map(
       (label, index) =>
-        `<text x="${chart.kind === 'bar' ? plot.left + (index + 0.5) * (plot.width / pointCount) : xFor(series[0], index) + appearance.tickOffsetX}" y="${plot.bottom + 28 + appearance.tickOffsetY}" fill="${appearance.tickColor}" font-family="${appearance.tickFont}" font-size="${appearance.tickSize}" text-anchor="middle">${escapeSvgText(label)}</text>`
+        `<text data-neopresent-x-tick-index="${index}" x="${chart.kind === 'bar' ? plot.left + (index + 0.5) * (plot.width / pointCount) : xFor(series[0], index) + appearance.tickOffsetX}" y="${plot.bottom + 28 + appearance.tickOffsetY}" fill="${appearance.tickColor}" font-family="${appearance.tickFont}" font-size="${appearance.tickSize}" text-anchor="middle">${escapeSvgText(label)}</text>`
     )
     .join('');
   const xTicks = xLog
@@ -5158,12 +5957,12 @@ function createChartViewRaw(chart, theme) {
     : createScientificTicks(xMinimum, xMaximum, appearance.tickDivisions);
   const xGrid = numericX
     ? xTicks
-        .map((value) => {
+        .map((value, index) => {
           const x =
             plot.left +
             (((xLog ? Math.log10(value) : value) - xMinimumScaled) / xRange) * plot.width;
           return `<path d="M ${x} ${plot.top} V ${plot.bottom}" stroke="${appearance.gridColor}" stroke-width="${appearance.gridWidth}" stroke-dasharray="4 6" opacity="0.45" />
-      ${diagnosticEnabled ? '' : `<text x="${x + appearance.tickOffsetX}" y="${plot.bottom + 28 + appearance.tickOffsetY}" fill="${appearance.tickColor}" font-family="${appearance.tickFont}" font-size="${appearance.tickSize}" text-anchor="middle">${formatScaleTick(value, xLog)}</text>`}`;
+      ${diagnosticEnabled ? '' : `<text data-neopresent-x-tick-index="${index}" x="${x + appearance.tickOffsetX}" y="${plot.bottom + 28 + appearance.tickOffsetY}" fill="${appearance.tickColor}" font-family="${appearance.tickFont}" font-size="${appearance.tickSize}" text-anchor="middle">${formatScaleTick(value, xLog)}</text>`}`;
         })
         .join('')
     : '';
@@ -5259,7 +6058,8 @@ function createChartViewRaw(chart, theme) {
             xMaximum,
             theme,
             itemAppearance,
-            plot
+            plot,
+            item.morphKey ?? index
           )
         : chart.kind === 'bar'
           ? createBarMarkup(
@@ -5272,7 +6072,16 @@ function createChartViewRaw(chart, theme) {
               index,
               visibleSeries.length
             )
-          : createLineMarkup(itemChart, points, errors, itemYFor, theme, itemAppearance, plot);
+          : createLineMarkup(
+              itemChart,
+              points,
+              errors,
+              itemYFor,
+              theme,
+              itemAppearance,
+              plot,
+              item.morphKey ?? index
+            );
       const highlightedMarkup = decoratePlotElements(markup, item, itemAppearance.dataColor);
       const seriesStyle = createPlotHighlightStyle(item, itemAppearance.dataColor);
       return seriesStyle
@@ -5478,7 +6287,7 @@ function createChartViewRaw(chart, theme) {
 
   return {
     tag: 'div',
-    style: { maxWidth: '100%', width: appearance.chartWidth },
+    style: { maxWidth: '100%', width: appearance.chartWidth || `min(100%, ${width}px)` },
     cn: [
       createChartTitle(chart.title, appearance, theme),
       {
@@ -7284,6 +8093,7 @@ function getRenderableSeries(chart) {
             uncertaintyLayers: [],
             labels: Array.isArray(item.labels) ? item.labels.map(String) : [],
             name: String(item.name ?? `Function ${index + 1}`),
+            morphKey: `function:${String(item.name ?? index + 1)}`,
             smooth: false,
             trendline: false,
             values: Array.isArray(item.values) ? item.values.filter(Number.isFinite) : [],
@@ -8276,6 +9086,7 @@ function compileFitFunction(expression, names) {
 }
 
 function createFitMarkup(fit, xFor, yFor, appearance, plot) {
+  const morphKey = `fit:${fit.id}`;
   const points = fit.samples.filter((sample) => Number.isFinite(sample.y));
   if (points.length < 2) return '';
   const belongsToFitRegion = (point) =>
@@ -8315,8 +9126,8 @@ function createFitMarkup(fit, xFor, yFor, appearance, plot) {
     fit.config.band && envelopeSegments.length > 0
       ? envelopeSegments
           .map(
-            (segment) =>
-              `<path style="${bandStyle}" d="${segment.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(point.x)} ${yFor(point.y + point.uncertainty)}`).join(' ')} ${[
+            (segment, segmentIndex) =>
+              `<path data-neopresent-morph-mark="${escapeSvgText(`${morphKey}:band:${segmentIndex}`)}" style="${bandStyle}" d="${segment.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(point.x)} ${yFor(point.y + point.uncertainty)}`).join(' ')} ${[
                 ...segment
               ]
                 .reverse()
@@ -8384,9 +9195,9 @@ function createFitMarkup(fit, xFor, yFor, appearance, plot) {
     ? `${dashedDraw ? 'clip-path:inset(0 100% 0 0);' : animation}animation:neopresent-chart-${animationName} ${fit.config.animationDuration} ${fit.config.animationEasing} ${fit.config.animationDelay} both;transform-box:fill-box;transform-origin:center`
     : '';
   const curve = fit.config.draw
-    ? `<path ${fit.config.lineStyle ? '' : 'pathLength="1"'} style="${style}" d="${path}" fill="none" stroke="${fit.config.color}" stroke-dasharray="${fit.config.lineStyle || 'none'}" stroke-opacity="${fit.config.alpha}" stroke-width="${fit.config.width}" stroke-linecap="round" />`
+    ? `<path data-neopresent-series-line="${escapeSvgText(morphKey)}" ${fit.config.lineStyle ? '' : 'pathLength="1"'} style="${style}" d="${path}" fill="none" stroke="${fit.config.color}" stroke-dasharray="${fit.config.lineStyle || 'none'}" stroke-opacity="${fit.config.alpha}" stroke-width="${fit.config.width}" stroke-linecap="round" />`
     : '';
-  return `${band}${curve}${summary ? `<text x="${summaryX}" y="${summaryY}" fill="${fit.config.labelColor}" font-family="${appearance.tickFont}" font-size="${fit.config.labelSize}" text-anchor="${summaryAnchor}">${summary}</text>` : ''}${createFitCorrelationMarkup(fit, plot, appearance)}`;
+  return `${band}${curve}${summary ? `<text data-neopresent-fit-text="${escapeSvgText(morphKey)}" x="${summaryX}" y="${summaryY}" fill="${fit.config.labelColor}" font-family="${appearance.tickFont}" font-size="${fit.config.labelSize}" text-anchor="${summaryAnchor}">${summary}</text>` : ''}${createFitCorrelationMarkup(fit, plot, appearance)}`;
 }
 
 function createFitCorrelationMarkup(fit, plot, appearance) {
@@ -9083,7 +9894,7 @@ function getPlotAppearance(chart, theme) {
     plotOffsetY: offset('plot-offset-y'),
     plotAlpha: alpha('plot-alpha'),
     chartHeight: safeDimension(style['chart-height'], 'auto'),
-    chartWidth: safeDimension(style['chart-width'], '100%'),
+    chartWidth: safeDimension(style['chart-width'], ''),
     plotHeight: safePlotDimension(style['plot-height'], 270),
     plotWidth: safePlotDimension(style['plot-width'], 720),
     referenceColor: color('reference-color', theme.foreground),
@@ -9518,8 +10329,8 @@ function createHistogramView(chart, theme) {
       const barWidth = slotWidth - gap;
       const y = yFor(count);
       const shape = appearance.histogramFill
-        ? `<rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(2, plot.bottom - y)}" rx="${gap > 0 ? 3 : 0}" fill="${appearance.dataColor}" />`
-        : `<path d="M ${x} ${y} H ${x + barWidth}" fill="none" stroke="${appearance.dataColor}" stroke-width="${Math.max(1, appearance.dataSize / 2)}" />`;
+        ? `<rect data-neopresent-morph-mark="histogram:${index}" x="${x}" y="${y}" width="${barWidth}" height="${Math.max(2, plot.bottom - y)}" rx="${gap > 0 ? 3 : 0}" fill="${appearance.dataColor}" />`
+        : `<path data-neopresent-morph-mark="histogram:${index}" d="M ${x} ${y} H ${x + barWidth}" fill="none" stroke="${appearance.dataColor}" stroke-width="${Math.max(1, appearance.dataSize / 2)}" />`;
       return `<g data-neopresent-tooltip="${escapeSvgText(`${formatChartValue(lower)}–${formatChartValue(upper)}: ${count}`)}" data-neopresent-mark-kind="bar" style="${createDataAnimation(appearance, index, bins, 'center bottom')}">
       ${shape}
       <title>${escapeSvgText(`${formatChartValue(lower)}–${formatChartValue(upper)}: ${count}`)}</title>
@@ -9618,7 +10429,7 @@ function createHistogramView(chart, theme) {
 
   return {
     tag: 'div',
-    style: { maxWidth: '100%', width: appearance.chartWidth },
+    style: { maxWidth: '100%', width: appearance.chartWidth || `min(100%, ${width}px)` },
     cn: [
       createChartTitle(chart.title, appearance, theme),
       {
@@ -9897,7 +10708,7 @@ function createMultiHistogramView(chart, theme, appearance) {
     : '';
   return {
     tag: 'div',
-    style: { maxWidth: '100%', width: appearance.chartWidth },
+    style: { maxWidth: '100%', width: appearance.chartWidth || `min(100%, ${width}px)` },
     cn: [
       createChartTitle(chart.title, appearance, theme),
       {
@@ -9962,7 +10773,7 @@ function createBoxPlotView(chart, theme) {
     <path d="M ${center - boxWidth / 2} ${yFor(median)} H ${center + boxWidth / 2}" stroke="${appearance.dataColor}" stroke-width="${appearance.dataSize}" /></g>`;
   return {
     tag: 'div',
-    style: { maxWidth: '100%', width: appearance.chartWidth },
+    style: { maxWidth: '100%', width: appearance.chartWidth || `min(100%, ${width}px)` },
     cn: [
       createChartTitle(chart.title, appearance, theme),
       {
@@ -10134,7 +10945,8 @@ function createScatterMarkup(
   xMaximum,
   theme,
   appearance,
-  plot
+  plot,
+  seriesIndex = 0
 ) {
   const mode = getDrawMode(appearance.drawMode, 'scatter');
   const lowerErrors = Array.isArray(errors) ? errors : errors.lower;
@@ -10202,7 +11014,9 @@ function createScatterMarkup(
         plot
       )
     : '';
-  const line = mode.includes('L') ? createDataPath(points, chart.smooth, appearance) : '';
+  const line = mode.includes('L')
+    ? createDataPath(points, chart.smooth, appearance, seriesIndex)
+    : '';
   const dots = mode.includes('P')
     ? points
         .map((point, index) => {
@@ -10271,12 +11085,12 @@ function createScatterMarkup(
                   Math.max(1, scaledMaximum - scaledMinimum)) *
                   (appearance.bubbleMax - appearance.bubbleMin)
               : appearance.dataSize + 2;
-          return createPointSymbol(
-            point,
+          return `<g data-neopresent-series-point="${escapeSvgText(`${seriesIndex}:${index}`)}" transform="translate(${point.x} ${point.y})">${createPointSymbol(
+            { x: 0, y: 0 },
             { ...appearance, dataSize: Math.max(0.5, bubbleRadius - 2) },
             createDataAnimation(appearance, index, points.length),
             tooltip
-          );
+          )}</g>`;
         })
         .join('')
     : '';
@@ -10632,7 +11446,7 @@ function createTrendline(
   return `${path}<text x="${plot.left + plot.width - 8}" y="${plot.top + 18}" fill="${appearance.tickColor}" font-family="${appearance.tickFont}" font-size="${Math.max(11, appearance.tickSize * 0.65)}" text-anchor="end">${annotation}</text>`;
 }
 
-function createLineMarkup(chart, points, errors, yFor, theme, appearance, plot) {
+function createLineMarkup(chart, points, errors, yFor, theme, appearance, plot, seriesIndex = 0) {
   const path =
     chart.smooth && points.length > 1
       ? points.slice(0, -1).reduce((result, point, index) => {
@@ -10666,18 +11480,20 @@ function createLineMarkup(chart, points, errors, yFor, theme, appearance, plot) 
     ? points
         .map(
           (point, index) => `
-    ${createPointSymbol(point, appearance, createDataAnimation(appearance, index, points.length), `${chart.labels[index]}: ${formatChartValue(chart.values[index])}`)}
-    <text x="${point.x}" y="${point.y - 15}" fill="${appearance.valueColor}" font-family="${appearance.valueFont}" font-size="${appearance.valueSize}" font-weight="700" text-anchor="middle">${formatChartValue(chart.values[index])}</text>`
+    <g data-neopresent-series-point="${escapeSvgText(`${seriesIndex}:${index}`)}" transform="translate(${point.x} ${point.y})">
+      ${createPointSymbol({ x: 0, y: 0 }, appearance, createDataAnimation(appearance, index, points.length), `${chart.labels[index]}: ${formatChartValue(chart.values[index])}`)}
+      <text x="0" y="-15" fill="${appearance.valueColor}" font-family="${appearance.valueFont}" font-size="${appearance.valueSize}" font-weight="700" text-anchor="middle">${formatChartValue(chart.values[index])}</text>
+    </g>`
         )
         .join('')
     : '';
 
   const area =
     chart.kind === 'area'
-      ? `<path style="${createSeriesAnimation(appearance)}" d="${path} L ${points.at(-1).x} ${plot.bottom} L ${points[0].x} ${plot.bottom} Z" fill="${appearance.dataColor}" opacity=".22" />`
+      ? `<path data-neopresent-morph-mark="${escapeSvgText(`area:${seriesIndex}`)}" style="${createSeriesAnimation(appearance)}" d="${path} L ${points.at(-1).x} ${plot.bottom} L ${points[0].x} ${plot.bottom} Z" fill="${appearance.dataColor}" opacity=".22" />`
       : '';
   const line = mode.includes('L')
-    ? `<path pathLength="1" style="${createSeriesAnimation(appearance)}" d="${path}" fill="none" stroke="${appearance.dataColor}" stroke-dasharray="${appearance.lineStyle || 'none'}" stroke-linecap="round" stroke-linejoin="round" stroke-width="${appearance.dataSize}" />`
+    ? `<path data-neopresent-series-line="${escapeSvgText(seriesIndex)}" pathLength="1" style="${createSeriesAnimation(appearance)}" d="${path}" fill="none" stroke="${appearance.dataColor}" stroke-dasharray="${appearance.lineStyle || 'none'}" stroke-linecap="round" stroke-linejoin="round" stroke-width="${appearance.dataSize}" />`
     : '';
   const band =
     appearance.band && errors.some((error) => error > 0)
@@ -10686,7 +11502,7 @@ function createLineMarkup(chart, points, errors, yFor, theme, appearance, plot) 
   return `${band}${area}${errorBars}${line}${dots}`;
 }
 
-function createDataPath(points, smooth, appearance) {
+function createDataPath(points, smooth, appearance, seriesIndex = 0) {
   const path =
     smooth && points.length > 1
       ? points.slice(0, -1).reduce((result, point, index) => {
@@ -10696,7 +11512,7 @@ function createDataPath(points, smooth, appearance) {
           return `${result} C ${point.x + (next.x - previous.x) / 6} ${point.y + (next.y - previous.y) / 6}, ${next.x - (following.x - point.x) / 6} ${next.y - (following.y - point.y) / 6}, ${next.x} ${next.y}`;
         }, `M ${points[0].x} ${points[0].y}`)
       : points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
-  return `<path pathLength="1" style="${createSeriesAnimation(appearance)}" d="${path}" fill="none" stroke="${appearance.dataColor}" stroke-dasharray="${appearance.lineStyle || 'none'}" stroke-linecap="round" stroke-linejoin="round" stroke-width="${appearance.dataSize}" />`;
+  return `<path data-neopresent-series-line="${escapeSvgText(seriesIndex)}" pathLength="1" style="${createSeriesAnimation(appearance)}" d="${path}" fill="none" stroke="${appearance.dataColor}" stroke-dasharray="${appearance.lineStyle || 'none'}" stroke-linecap="round" stroke-linejoin="round" stroke-width="${appearance.dataSize}" />`;
 }
 
 function createErrorBand(values, errors, points, yFor, appearance) {
@@ -10887,7 +11703,7 @@ function createBarMarkup(
       const category = chart.labels[index] ?? String(index + 1);
       const tooltip = `${seriesCount > 1 ? `${chart.name} · ` : ''}${category}: ${formatChartValue(chart.values[index])}`;
       const animationIndex = seriesIndex * points.length + index;
-      return `<rect data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-bar-series="${seriesIndex}" data-neopresent-bar-category="${index}" style="${createDataAnimation(appearance, animationIndex, points.length * seriesCount, 'center bottom')}" x="${x - barWidth / 2}" y="${top}" width="${barWidth}" height="${Math.max(height, 2)}" rx="5" fill="${color}">
+      return `<rect data-neopresent-morph-mark="bar:${seriesIndex}:${index}" data-neopresent-tooltip="${escapeSvgText(tooltip)}" data-neopresent-bar-series="${seriesIndex}" data-neopresent-bar-category="${index}" style="${createDataAnimation(appearance, animationIndex, points.length * seriesCount, 'center bottom')}" x="${x - barWidth / 2}" y="${top}" width="${barWidth}" height="${Math.max(height, 2)}" rx="5" fill="${color}">
       <title>${escapeSvgText(tooltip)}</title>
     </rect>
     <text x="${x}" y="${chart.values[index] < 0 ? y + 18 : y - 10}" fill="${appearance.valueColor}" font-family="${appearance.valueFont}" font-size="${appearance.valueSize}" font-weight="700" text-anchor="middle">${formatChartValue(chart.values[index])}</text>`;

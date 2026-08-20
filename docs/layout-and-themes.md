@@ -25,6 +25,30 @@ Set the general slide alignment with:
 3. Results
 ```
 
+## Heading panels
+
+Themes may define `headingOffset`, `headingPanelWidth`, `headingPanelMaxWidth`, and `headingPadding`. These apply to every slide using that theme. For example, add the following to a theme in `apps/viewer/src/neo/theme.mjs`:
+
+```js
+headingOffset: '0, -18px',
+headingPanelWidth: 'fit-content',
+headingPanelMaxWidth: '92%',
+headingPadding: '.10em .28em .12em',
+```
+
+Use the corresponding directives to override one slide without changing the theme:
+
+```markdown
+@heading-offset 0, -18px
+@heading-panel-width fit-content
+@heading-panel-max-width 92%
+@heading-panel-padding .10em .28em .12em
+
+# A compact heading panel
+```
+
+`@heading-offset` moves the heading and its background together. `fit-content` narrows the panel to the title, while `@heading-panel-max-width` keeps long titles from exceeding the content area.
+
 ## Columns
 
 Create columns with `::columns`, separate them with `::column`, and close with `::end`:
@@ -253,7 +277,59 @@ Footer shadows use the same model as content shadows:
 @footer-shadow-opacity 35%
 ```
 
-Use `@footer-shadow-offset 3px, 5px` instead of angle/distance for a direct offset. `box`, `contact`, and `curved` are also accepted shadow styles.
+Use `@footer-shadow-offset 3px, 5px` instead of angle/distance for a direct offset. `box`, `contact`, and `curved` are also accepted shadow styles. Contact shadows accept `@footer-shadow-perspective` from `-100` to `100`; curved footer shadows accept `@footer-shadow-curve` and `@footer-shadow-size`.
+
+The styles follow Keynote's visual roles: `drop` casts a directional shadow from
+the rendered object so it appears to hover; `contact` compresses the shadow at
+the object's base so it appears to stand on the slide; and `curved` emphasizes
+the lower corners so a card or image appears curled. `box` remains the ordinary
+rectangular CSS-style shadow. For contact shadows, `shadow-perspective: 0` is
+symmetric, while positive and negative values skew the footprint in opposite
+directions. On unfilled text, contact uses glyph-level rendering rather than a
+rectangular panel shadow. Curved shadows use one smoothly displaced alpha mask;
+its lower blur tail fades gradually so multiline text retains the internal
+curved-shadow treatment without producing a redundant readable copy beneath
+its final line. `box` always follows the rectangular block bounds.
+
+## Deck-wide content shadows
+
+Use preamble shadow defaults when the same treatment should apply throughout a deck. `@block-shadow` is the shared baseline; targeted directives override it for their block type. The available targets are `heading`, `plot`, `image`, `pdf`, `table`, `code`, and `quote`.
+
+```markdown
+@block-shadow drop
+@block-shadow-color #000000
+@block-shadow-opacity 28%
+@block-shadow-offset 4px, 6px
+@block-shadow-blur 9px
+
+@heading-shadow contact
+@heading-shadow-opacity 18%
+
+@plot-shadow curved
+@plot-shadow-color #18324a
+@plot-shadow-blur 12px
+```
+
+Every target supports the same suffixes: `-color`, `-opacity`, `-angle`, `-distance`, `-offset`, `-blur`, `-curve`, `-size`, and `-perspective`. A local block directive such as `@shadow none` or `@shadow-opacity 12%` takes precedence over its deck-wide default. `@block-shadow…` also supplies the baseline for footers; `@footer-shadow…` overrides it only for the footer.
+
+## Deck-wide glass
+
+Glass uses the same inheritance model. `@block-glass` supplies the baseline for every block and the footer; targeted settings override it for `heading`, `plot`, `image`, `pdf`, `table`, `code`, `quote`, or `footer`. Footer glass is drawn independently behind each populated left, center, or right slot; empty footer slots never create glass panels.
+
+```markdown
+@block-glass on
+@block-glass-color #ffffff
+@block-glass-alpha 16%
+@block-glass-blur 18px
+@block-glass-edge-color #ffffff
+@block-glass-edge-alpha 38%
+@block-glass-radius .8rem
+
+@plot-glass-alpha 10%
+@footer-glass off
+```
+
+Available suffixes are `-color`, `-alpha`, `-transparency`, `-blur`, `-saturation`, `-thickness`, `-edge-color`, `-edge-alpha`, `-depth`, `-depth-alpha`, and `-radius`. Ordinary `@glass…` directives remain local and override the deck-wide value for their following block.
 
 ## Logo and progress
 

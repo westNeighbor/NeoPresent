@@ -175,7 +175,7 @@ The following inventory is generated directly from the parser. Exact names are g
 
 ### Title, caption, and canvas
 
-`title-color`, `title-size`, `title-font`, `title-offset-x`, `title-offset-y`, `title-alpha`, `caption`, `caption-size`, `caption-color`, `caption-align`, `caption-font`, `caption-offset-x`, `caption-offset-y`, `plot-alpha`, `plot-offset-x`, `plot-offset-y`, `plot-width`, `plot-height`, `chart-width`, `chart-height`
+`title-color`, `title-size`, `title-font`, `title-offset-x`, `title-offset-y`, `title-alpha`, `caption`, `caption-size`, `caption-color`, `caption-align`, `caption-font`, `caption-offset-x`, `caption-offset-y`, `plot-alpha`, `plot-offset-x`, `plot-offset-y`, `plot-width`, `plot-height`, `chart-width`, `chart-height`, `chart-padding`, `chart-trim`
 
 `plot-width` and `plot-height` also size the specialized scientific renderers, including
 ratio, efficiency, ROC, polar, ternary, forest, corner, ECDF/survival, volcano,
@@ -183,6 +183,12 @@ waterfall, Sankey, time-series, geographic, scalar-field, and 3D surface plots.
 Use the same CSS-length syntax as the original renderers, for example
 `plot-width: 620px` and `plot-height: 370px`. Unitless numbers remain supported
 and are interpreted as pixels.
+
+`chart-padding` adds space around the complete plot block using normal CSS
+one-to-four-value order. `chart-trim` removes unused space from the SVG canvas
+in `top right bottom left` order using SVG pixels. For example,
+`chart-trim: 0 80 0 80` tightens circular plots horizontally, while
+`chart-trim: 0 0 90 0` removes excess space below a sparse alluvial plot.
 The sizing remains responsive inside `::group`, `::columns`, and `::grid` blocks;
 `plot-width: 100%` fills the available group, column, or grid cell.
 

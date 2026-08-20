@@ -10,7 +10,7 @@ import { parseMarkdown } from '../../markdown/dist/index.js';
 import { createExportFrames } from './export-steps.js';
 
 export const packageName = '@neopresent/cli';
-export const version = '0.2.0';
+export const version = '0.3.0';
 
 const commandHelp: Record<string, string> = {
   build: `Usage: neopresent build
